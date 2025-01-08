@@ -3,24 +3,22 @@ CFLAGS = -Wall
 TARGET = main
 SRCDIR = src
 OBJDIR = obj
-OBJS = $(OBJDIR)/main.o $(OBJDIR)/matops.o
+OBJS = $(OBJDIR)/main.o $(OBJDIR)/matops.o $(OBJDIR)/gradops.o
 
-# Ensure the object directory exists before compiling
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET)
 
-# Object file for main
-$(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/matops.h | $(OBJDIR)
+$(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/matops.h $(SRCDIR)/gradops.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $(SRCDIR)/main.c -o $(OBJDIR)/main.o
 
-# Object file for matops
 $(OBJDIR)/matops.o: $(SRCDIR)/matops.c $(SRCDIR)/matops.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $(SRCDIR)/matops.c -o $(OBJDIR)/matops.o
 
-# Create obj directory if not present
+$(OBJDIR)/gradops.o: $(SRCDIR)/gradops.c $(SRCDIR)/gradops.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $(SRCDIR)/gradops.c -o $(OBJDIR)/gradops.o
+
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
-# Clean build artifacts
 clean:
 	rm -rf $(OBJDIR) $(TARGET)

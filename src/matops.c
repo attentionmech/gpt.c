@@ -3,7 +3,7 @@
 #include <math.h>
 #include "matops.h"
 
-float** add(float **A, float **B, int rows, int cols) {
+float** addition(float **A, float **B, int rows, int cols) {
     float **C = (float**)malloc(rows * sizeof(float*));
     for (int i = 0; i < rows; i++) {
         C[i] = (float*)malloc(cols * sizeof(float));
