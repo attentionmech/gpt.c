@@ -21,7 +21,7 @@ int main() {
     B[1][0] = 7.0; B[1][1] = 8.0;
 
     // Test matrix multiplication
-    float **C = matmul(A, B, 2, 2, 2);
+    float **C = multiply(A, B, 2, 2);
 
     printf("Matrix multiplication result:\n");
     for (int i = 0; i < 2; i++) {
