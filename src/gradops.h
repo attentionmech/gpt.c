@@ -18,3 +18,4 @@ Value* relu(Value* self);
 void add_backward(Value* out);
 void mul_backward(Value* out);
 void relu_backward(Value* out);
+void backward(Value* v);
