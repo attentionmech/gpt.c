@@ -31,6 +31,25 @@ int main() {
         printf("\n");
     }
 
+    float **AT = transpose(A,2,2);
+    
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            printf("%.2f ", AT[i][j]);
+        }
+        printf("\n");
+    }
+
+    float **ADD = add(A,B, 2,2);
+
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            printf("%.2f ", ADD[i][j]);
+        }
+        printf("\n");
+    }
+
+
     // Free memory
     for (int i = 0; i < 2; i++) {
         free(A[i]);

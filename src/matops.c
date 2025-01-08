@@ -3,6 +3,33 @@
 #include <math.h>
 #include "matops.h"
 
+float** add(float **A, float **B, int rows, int cols) {
+    float **C = (float**)malloc(rows * sizeof(float*));
+    for (int i = 0; i < rows; i++) {
+        C[i] = (float*)malloc(cols * sizeof(float));
+    }
+
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            C[i][j] = A[i][j] + B[i][j];
+        }
+    }
+    return C;
+}
+
+float** transpose(float **A, int rows, int cols) {
+    float **AT = (float**)malloc(cols * sizeof(float*));
+    for (int i = 0; i < cols; i++) {
+        AT[i] = (float*)malloc(rows * sizeof(float));
+    }
+
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            AT[j][i] = A[i][j];
+        }
+    }
+    return AT;
+}
 
 float** multiply(float **A, float **B, int rows, int cols) {
     float **C = (float**)malloc(rows * sizeof(float*));
