@@ -46,7 +46,6 @@ Value* relu(Value* self) {
     return out;
 }
 
-
 void add_backward(Value* out) {
     out->_prev[0]->grad += out->grad;
     out->_prev[1]->grad += out->grad;

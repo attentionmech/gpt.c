@@ -59,7 +59,6 @@ float* dot_product(float *A, float *B, int size) {
 }
 
 float** matmul(float **A, float **B, int m, int n, int p) {
-
     float **C = (float**)malloc(m * sizeof(float*));
     for (int i = 0; i < m; i++) {
         C[i] = (float*)malloc(p * sizeof(float));
