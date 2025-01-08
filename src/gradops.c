@@ -14,7 +14,7 @@ typedef struct Value {
 
 void add_backward(Value* out);
 void mul_backward(Value* out);
-
+void relu_backward(Value* out);
 
 Value* create_value(double data, size_t num_prev, struct Value** prev, const char* op) {
     Value* v = (Value*)malloc(sizeof(Value));
@@ -40,6 +40,13 @@ Value* mul(Value* self, Value* other) {
     return out;
 }
 
+Value* relu(Value* self) {
+    Value* out = create_value(self->data > 0 ? self->data : 0, 1, (Value*[]){self}, "ReLU");
+    out->_backward = relu_backward;
+    return out;
+}
+
+
 void add_backward(Value* out) {
     out->_prev[0]->grad += out->grad;
     out->_prev[1]->grad += out->grad;
@@ -49,3 +56,8 @@ void mul_backward(Value* out) {
     out->_prev[0]->grad += out->_prev[1]->data * out->grad;
     out->_prev[1]->grad += out->_prev[0]->data * out->grad;
 }
+
+void relu_backward(Value* out) {
+    out->_prev[0]->grad += (out->data > 0) * out->grad;
+}
+
