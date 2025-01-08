@@ -3,7 +3,7 @@
 gpt implemented in C all the way starting from a simple empty while loop
 
 - [X] Implement matrix operations
-- [ ] Build a basic feed-forward neural network  
+- [X] Build a basic feed-forward neural network  
 - [ ] Develop backpropagation and gradient descent optimizer  
 - [ ] Implement activation functions (`ReLU`, `Softmax`)  
 - [ ] Loss functions (`Cross-Entropy`)  
