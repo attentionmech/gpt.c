@@ -24,7 +24,7 @@ void mul_backward(Value* out);
 void relu_backward(Value* out);
 void noop_backward(Value* out);
 void mse_loss_backward(Value* loss);
-
+void print_graphviz(Value* v, FILE* f, char* visited);
 
 Value* create_value(double data, size_t num_prev, struct Value** prev, const char* op) {
     Value* v = (Value*)malloc(sizeof(Value));
@@ -165,16 +165,35 @@ void backward(Value* v) {
     }
 }
 
-// int main() {
-//     Value* v1 = create_value(2.0, 0, NULL, "input");
-//     Value* v0 = create_value(2.0, 0, NULL, "input");
-//     Value* v3 = create_value(4.0,0,NULL,"input");
 
+void print_graphviz(Value* v, FILE* f, char* visited) {
+    if (visited[v->id]) return;
+    visited[v->id] = 1;
 
-//     Value* v2 = mul(v0, v1);
-//     Value* v4 = add(v3, v2);
+    fprintf(f, "  node%d [label=\"%.2f (%s)\"];\n", v->id, v->data, v->op);
 
-//     backward(v4);
+    for (size_t i = 0; i < v->num_prev; i++) {
+        Value* prev_node = v->_prev[i];
+        fprintf(f, "  node%d -> node%d;\n", prev_node->id, v->id);  // directed edge
+        print_graphviz(prev_node, f, visited);
+    }
+}
 
-//     return 0;
-// }
+void generate_graphviz(Value* v) {
+    FILE* f = fopen("graphviz_output.dot", "w");
+    if (!f) {
+        fprintf(stderr, "Error: Unable to open file for writing Graphviz output.\n");
+        return;
+    }
+
+    fprintf(f, "digraph G {\n");
+    
+    char visited[MAX_PARAMS] = {0};
+    
+    print_graphviz(v, f, visited);
+    
+    fprintf(f, "}\n");
+    
+    fclose(f);
+    printf("Graphviz DOT file generated as 'graphviz_output.dot'. Use Graphviz to render the graph.\n");
+}

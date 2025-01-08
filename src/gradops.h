@@ -22,6 +22,7 @@ void mul_backward(Value* out);
 void relu_backward(Value* out);
 void sub_backward(Value* out);
 void power_backward(Value* out, double exponent);
+void generate_graphviz(Value* v);
 
 
 void backward(Value* v);
