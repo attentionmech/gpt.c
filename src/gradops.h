@@ -9,6 +9,8 @@ typedef struct Value {
     void (*_backward)(struct Value*); 
 } Value;
 
+void print_counter();
+
 Value* create_value(double data, size_t num_prev, struct Value** prev, const char* op);
 
 Value* add(Value* self, Value* other);

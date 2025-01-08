@@ -1,4 +1,4 @@
-#define MAX_PARAMS 10000
+#define MAX_PARAMS 100000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,6 +63,11 @@ Value* mul(Value* self, Value* other) {
         fprintf(stderr, "Memory allocation failed for prev_nodes\n");
         return NULL;
     }
+    if (self == NULL || other == NULL) {
+        fprintf(stderr, "Error: NULL pointer passed to mul function.\n");
+    }
+
+
     prev_nodes[0] = self;
     prev_nodes[1] = other;
     Value* out = create_value(self->data * other->data, 2, prev_nodes, "*");
@@ -163,6 +168,10 @@ void backward(Value* v) {
     for (int i = idx; i > 0; i--) {
         topo[i - 1]->_backward(topo[i - 1]);
     }
+}
+
+void print_counter(){
+    printf("Counter: %d\n\n", node_counter);
 }
 
 
