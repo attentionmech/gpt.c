@@ -1,4 +1,4 @@
-#define MAX_PARAMS 100
+#define MAX_PARAMS 10000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,9 +18,13 @@ typedef struct Value {
 size_t node_counter = 0;
 
 void add_backward(Value* out);
+void sub_backward(Value* out);
+void power_backward(Value* out);
 void mul_backward(Value* out);
 void relu_backward(Value* out);
 void noop_backward(Value* out);
+void mse_loss_backward(Value* loss);
+
 
 Value* create_value(double data, size_t num_prev, struct Value** prev, const char* op) {
     Value* v = (Value*)malloc(sizeof(Value));
@@ -92,6 +96,49 @@ void mul_backward(Value* out) {
 void relu_backward(Value* out) {
     out->_prev[0]->grad += (out->data > 0) * out->grad;
 }
+
+Value* sub(Value* a, Value* b) {
+    double result = a->data - b->data;
+
+    Value** prev_nodes = (Value**)malloc(2 * sizeof(Value*));
+    prev_nodes[0] = a;
+    prev_nodes[1] = b;
+
+    Value* result_val = create_value(result, 2, prev_nodes, "sub");
+    result_val->_backward = sub_backward;
+
+    return result_val;
+}
+
+void sub_backward(Value* out) {
+    Value* a = out->_prev[0];
+    Value* b = out->_prev[1];
+
+    a->grad += out->grad;
+    b->grad -= out->grad;
+}
+
+
+Value* power(Value* a, double exponent) {
+    double result = pow(a->data, exponent);
+
+    
+    Value** prev_nodes = (Value**)malloc(2 * sizeof(Value*));
+    prev_nodes[0] = a;
+    prev_nodes[1] = create_value(exponent, 0, NULL, "exponent-val");
+
+    Value* result_val = create_value(result, 2, prev_nodes, "power");
+    result_val->_backward = power_backward;
+
+    return result_val;
+}
+
+void power_backward(Value* out) {
+    Value* a = out->_prev[0];
+    double exponent = (out->_prev[1])->data;
+    a->grad += out->grad * (exponent-1) * a->data; 
+}
+
 
 void build_topo(Value* v, Value** topo, int* idx, char* visited) {
     if (!visited[v->id] && v!= NULL) {

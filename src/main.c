@@ -46,12 +46,15 @@ int main() {
 
     Value** outputs = forward_mlp(mlp, inputs);
 
-    Value* loss = add(outputs[0], outputs[1]);
+    Value* targets[2] = {
+        create_value(2.0, 0, NULL, "target"),
+        create_value(4.0, 0, NULL, "target")
+    };
 
-    backward(loss);
+    Value* loss = add(power(sub(outputs[1], targets[1]),2) , power(sub(outputs[0], targets[0]),2)); 
+    backward(loss); 
 
-    print_full_network_state(mlp, inputs, outputs, 3, 2);
-
+    
     free(mlp);
     return 0;
 }
