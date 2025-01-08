@@ -16,3 +16,21 @@ float* dot_product(float *A, float *B, int size) {
     }
     return result;
 }
+
+float** matmul(float **A, float **B, int m, int n, int p) {
+
+    float **C = (float**)malloc(m * sizeof(float*));
+    for (int i = 0; i < m; i++) {
+        C[i] = (float*)malloc(p * sizeof(float));
+    }
+
+    for (int i = 0; i < m; ++i) {
+        for (int j = 0; j < p; ++j) {
+            C[i][j] = 0;
+            for (int k = 0; k < n; ++k) {
+                C[i][j] += A[i][k] * B[k][j];
+            }
+        }
+    }
+    return C;
+}
