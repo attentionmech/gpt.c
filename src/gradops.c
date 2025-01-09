@@ -23,7 +23,6 @@ void power_backward(Value* out);
 void mul_backward(Value* out);
 void relu_backward(Value* out);
 void noop_backward(Value* out);
-void mse_loss_backward(Value* loss);
 void print_graphviz(Value* v, FILE* f, char* visited);
 
 Value* create_value(double data, size_t num_prev, struct Value** prev, const char* op) {
@@ -66,7 +65,6 @@ Value* mul(Value* self, Value* other) {
     if (self == NULL || other == NULL) {
         fprintf(stderr, "Error: NULL pointer passed to mul function.\n");
     }
-
 
     prev_nodes[0] = self;
     prev_nodes[1] = other;
@@ -127,7 +125,6 @@ void sub_backward(Value* out) {
 Value* power(Value* a, double exponent) {
     double result = pow(a->data, exponent);
 
-    
     Value** prev_nodes = (Value**)malloc(2 * sizeof(Value*));
     prev_nodes[0] = a;
     prev_nodes[1] = create_value(exponent, 0, NULL, "exponent-val");
@@ -166,12 +163,15 @@ void backward(Value* v) {
     build_topo(v, topo, &idx, visited);
 
     for (int i = idx; i > 0; i--) {
+        printf("%zu %f\n", topo[i-1]->id, topo[i-1]->grad);
         topo[i - 1]->_backward(topo[i - 1]);
+        printf("%zu %f\n", topo[i-1]->id, topo[i-1]->grad);
+
     }
 }
 
 void print_counter(){
-    printf("Counter: %d\n\n", node_counter);
+    printf("Counter: %zu\n\n", node_counter);
 }
 
 
@@ -179,11 +179,11 @@ void print_graphviz(Value* v, FILE* f, char* visited) {
     if (visited[v->id]) return;
     visited[v->id] = 1;
 
-    fprintf(f, "  node%d [label=\"%.2f (%s)\"];\n", v->id, v->data, v->op);
+    fprintf(f, "  node%zu [label=\"%.2f (%s)\"];\n", v->id, v->data, v->op);
 
     for (size_t i = 0; i < v->num_prev; i++) {
         Value* prev_node = v->_prev[i];
-        fprintf(f, "  node%d -> node%d;\n", prev_node->id, v->id);  // directed edge
+        fprintf(f, "  node%zu -> node%zu;\n", prev_node->id, v->id);  // directed edge
         print_graphviz(prev_node, f, visited);
     }
 }

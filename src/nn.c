@@ -16,6 +16,8 @@ typedef struct Layer {
     Neuron** neurons;
     size_t num_neurons;
     size_t num_inputs;
+    Value** outputs;
+
 } Layer;
 
 typedef struct MLP {
@@ -42,7 +44,8 @@ Layer* create_layer(size_t num_inputs, size_t num_neurons, int use_relu) {
     layer->num_inputs = num_inputs;
     layer->num_neurons = num_neurons;
     layer->neurons = (Neuron**)malloc(num_neurons * sizeof(Neuron*));
-    
+    layer->outputs = (Value**)malloc(num_neurons * sizeof(Value*));
+
     for (size_t i = 0; i < num_neurons; i++) {
         layer->neurons[i] = create_neuron(num_inputs, use_relu);
     }
@@ -74,11 +77,10 @@ Value* forward_neuron(Neuron* n, Value** inputs) {
 }
 
 Value** forward_layer(Layer* layer, Value** inputs) {
-    Value** outputs = (Value**)malloc(layer->num_neurons * sizeof(Value*));
     for (size_t i = 0; i < layer->num_neurons; i++) {
-        outputs[i] = forward_neuron(layer->neurons[i], inputs);
+        layer->outputs[i] = forward_neuron(layer->neurons[i], inputs);
     }
-    return outputs;
+    return layer->outputs;
 }
 
 Value** forward_mlp(MLP* mlp, Value** inputs) {
