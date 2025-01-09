@@ -26,3 +26,6 @@ typedef struct MLP {
 
 MLP* create_mlp(size_t* layer_sizes, size_t num_layers);
 Value** forward_mlp(MLP* mlp, Value** inputs);
+
+void zero_gradients(MLP *mlp);
+void free_mlp(MLP *mlp);

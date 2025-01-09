@@ -115,3 +115,45 @@ Value **forward_mlp(MLP *mlp, Value **inputs)
     }
     return outputs;
 }
+
+
+void zero_gradients(MLP *mlp) {
+    for (size_t i = 0; i < mlp->num_layers; i++) {
+        for (size_t j = 0; j < mlp->layers[i]->num_neurons; j++) {
+            Neuron *neuron = mlp->layers[i]->neurons[j];
+            neuron->bias->grad = 0;
+            for (size_t k = 0; k < neuron->num_inputs; k++) {
+                neuron->weights[k]->grad = 0;
+            }
+        }
+    }
+}
+
+
+void free_mlp(MLP *mlp) {
+    for (size_t i = 0; i < mlp->num_layers; i++) {
+        Layer *layer = mlp->layers[i];
+        for (size_t j = 0; j < layer->num_neurons; j++) {
+            Neuron *neuron = layer->neurons[j];
+            for (size_t k = 0; k < neuron->num_inputs; k++) {
+                free(neuron->weights[k]->op);
+                free(neuron->weights[k]);
+            }
+            free(neuron->weights);
+            free(neuron->bias->op);
+            free(neuron->bias);
+            free(neuron->add_out->op);
+            free(neuron->add_out);
+            free(neuron->mul_out->op);
+            free(neuron->mul_out);
+            free(neuron->act_out->op);
+            free(neuron->act_out);
+            free(neuron);
+        }
+        free(layer->neurons);
+        free(layer->outputs);
+        free(layer);
+    }
+    free(mlp->layers);
+    free(mlp);
+}
