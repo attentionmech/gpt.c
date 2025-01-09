@@ -21,7 +21,7 @@ int main()
     MLP *mlp = create_mlp(layer_sizes, 3);
 
     size_t epochs = 10;
-    float learning_rate = 0.001;
+    float learning_rate = 0.01;
 
     Value* sub_out = create_value(0,0,NULL,"sub_out");
     Value* power_out = create_value(0,0,NULL,"power_out");

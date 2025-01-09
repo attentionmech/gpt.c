@@ -25,6 +25,8 @@ void power_backward(Value *out);
 void mul_backward(Value *out);
 void relu_backward(Value *out);
 void noop_backward(Value *out);
+void sigmoid_backward(Value *out);
+
 void print_graphviz(Value *v, FILE *f, char *visited);
 
 Value *create_value(double data, size_t num_prev, struct Value **prev, const char *op)
@@ -175,7 +177,7 @@ Value *relu(Value *self, Value *result, int update)
     }
     else
     {
-        out = create_value(self->data > 0 ? self->data : 0, 1, prev_nodes, "ReLU");
+        out = create_value(self->data > 0 ? self->data : 0, 1, prev_nodes, "act");
     }
     out->_backward = relu_backward;
     return out;
@@ -265,6 +267,57 @@ Value *sub(Value *a, Value *b, Value *result, int update)
     out->_backward = sub_backward;
     return out;
 }
+
+Value *sigmoid(Value *self, Value *result, int update)
+{
+    Value **prev_nodes;
+
+    if (update == 1 && result->_prev != NULL)
+    {
+        prev_nodes = result->_prev;
+    }
+    else
+    {
+        prev_nodes = (Value **)malloc(sizeof(Value *));
+    }
+
+    if (prev_nodes == NULL)
+    {
+        fprintf(stderr, "Memory allocation failed for prev_nodes in sigmoid\n");
+        return NULL;
+    }
+
+    if (self == NULL)
+    {
+        fprintf(stderr, "Error: NULL pointer passed to sigmoid function.\n");
+        return NULL;
+    }
+
+    prev_nodes[0] = self;
+    Value *out;
+    double sigmoid_data = 1 / (1 + exp(-self->data));
+
+    if (update == 1)
+    {
+        update_value(result, sigmoid_data, prev_nodes, 1);
+        out = result;
+    }
+    else
+    {
+        out = create_value(sigmoid_data, 1, prev_nodes, "act");
+    }
+
+    out->_backward = sigmoid_backward;
+    return out;
+}
+
+void sigmoid_backward(Value *out)
+{
+    Value *a = out->_prev[0];
+    a->grad += out->grad * a->data * (1 - a->data);
+}
+
+
 
 void add_backward(Value *out)
 {

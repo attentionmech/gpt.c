@@ -13,7 +13,7 @@ typedef struct Neuron
     int use_relu;
     Value *add_out;
     Value *mul_out;
-    Value *relu_out;
+    Value *act_out;
 } Neuron;
 
 typedef struct Layer
@@ -38,14 +38,15 @@ Neuron *create_neuron(size_t num_inputs, int use_relu)
     n->use_relu = use_relu;
 
     n->weights = (Value **)malloc(num_inputs * sizeof(Value *));
+    double stddev = sqrt(2.0 / num_inputs);  // This is for ReLU activation
     for (size_t i = 0; i < num_inputs; i++)
     {
-        n->weights[i] = create_value(rand() / (double)RAND_MAX, 0, NULL, "weight");
+        n->weights[i] = create_value(((rand() / (double)RAND_MAX) * 2 - 1) * stddev, 0, NULL, "weight");
     }
-    n->bias = create_value(0, 0, NULL, "bias");
+    n->bias = create_value(rand()/(double)RAND_MAX, 0, NULL, "bias");
     n->add_out = create_value(0, 0, NULL, "add_out");
     n->mul_out = create_value(0, 0, NULL, "mul_out");
-    n->relu_out = create_value(0,0,NULL,"relu_out");
+    n->act_out = create_value(0,0,NULL,"act_out");
 
     return n;
 }
@@ -87,13 +88,13 @@ Value *forward_neuron(Neuron *n, Value **inputs)
     Value *output = n->bias;
     Value *add_out = n->add_out;
     Value *mul_out = n->mul_out;
-    Value *relu_out = n->relu_out;
+    Value *act_out = n->act_out;
     for (size_t i = 0; i < n->num_inputs; i++)
     {
         output = add(output, mul(inputs[i], n->weights[i], mul_out, 1), add_out, 1);
     }
 
-    return n->use_relu ? relu(output, relu_out, 1) : output;
+    return n->use_relu ? relu(output, act_out, 1) : sigmoid(output, act_out,1);
 }
 
 Value **forward_layer(Layer *layer, Value **inputs)
