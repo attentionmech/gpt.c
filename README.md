@@ -21,3 +21,7 @@ gpt implemented in C all the way starting from a simple empty while loop
 - [ ] Implement text generation (Greedy Decoding)  
 - [ ] Add Beam Search for better inference  
 - [ ] Add performance metrics (perplexity, loss tracking)  
+
+Current State:
+
+- too much object reallocation, design needs to change
