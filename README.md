@@ -1,6 +1,6 @@
 # gpt.c
 
-gpt implemented in C all the way starting from a simple empty while loop
+gpt implemented in C
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
@@ -8,8 +8,10 @@ gpt implemented in C all the way starting from a simple empty while loop
 - [X] Develop backpropagation 
 - [X] Gradient descent    
 - [X] Implement ReLU
-- [ ] Implement Softmax 
-- [ ] Loss functions (`Cross-Entropy`)
+- [X] Implement Softmax 
+- [X] Loss function MSE
+- [X] XOR Test
+- [ ] MNIST Test
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
@@ -26,4 +28,4 @@ gpt implemented in C all the way starting from a simple empty while loop
 Current State:
 
 - ~~too much object reallocation, design needs to change~~
-- Gradients are not converging properly
+- ~~Gradients are not converging properly~~
