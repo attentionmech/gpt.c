@@ -4,11 +4,9 @@ gpt implemented in C
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
-- [X] Create Feed-Forward Layer  
 - [X] Develop backpropagation 
-- [X] Gradient descent    
-- [X] Implement ReLU
-- [X] Implement Softmax 
+- [X] Gradient descent
+- [X] Implement ReLU and Softmax
 - [X] Loss function MSE
 - [X] XOR Test
 - [ ] MNIST Test
