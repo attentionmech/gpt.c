@@ -206,7 +206,7 @@ Value *power(Value *a, double exponent, Value *result, int update)
     }
 
     prev_nodes[0] = a;
-    
+
     double result_data = pow(a->data, exponent);
 
     Value *out;
@@ -266,7 +266,6 @@ Value *sub(Value *a, Value *b, Value *result, int update)
     return out;
 }
 
-
 void add_backward(Value *out)
 {
     out->_prev[0]->grad += out->grad;
@@ -284,8 +283,6 @@ void relu_backward(Value *out)
     out->_prev[0]->grad += (out->data > 0) * out->grad;
 }
 
-
-
 void sub_backward(Value *out)
 {
     Value *a = out->_prev[0];
@@ -294,7 +291,6 @@ void sub_backward(Value *out)
     a->grad += out->grad;
     b->grad -= out->grad;
 }
-
 
 void power_backward(Value *out)
 {
@@ -329,7 +325,6 @@ void backward(Value *v)
 
     for (int i = idx; i > 0; i--)
     {
-        printf("topo: %d %s\n", i, topo[i-1]->op);
         topo[i - 1]->_backward(topo[i - 1]);
     }
 }

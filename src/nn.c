@@ -58,8 +58,6 @@ Layer *create_layer(size_t num_inputs, size_t num_neurons, int use_relu)
     layer->neurons = (Neuron **)malloc(num_neurons * sizeof(Neuron *));
     layer->outputs = (Value **)malloc(num_neurons * sizeof(Value *));
 
-
-    printf("numinputs: %zu num_neurons: %zu use_relu: %d\n", num_inputs, num_neurons, use_relu);
     for (size_t i = 0; i < num_neurons; i++)
     {
         layer->neurons[i] = create_neuron(num_inputs, use_relu);
@@ -78,7 +76,6 @@ MLP *create_mlp(size_t *layer_sizes, size_t num_layers)
     {
         int use_relu = (i != num_layers - 1);
         size_t num_inputs = (i == 0) ? layer_sizes[i] : layer_sizes[i - 1];
-        printf("Creating layer: %zu with relu: %d with inputs: %zu\n", i,use_relu, num_inputs);
         mlp->layers[i] = create_layer(num_inputs, layer_sizes[i], use_relu);
     }
 
