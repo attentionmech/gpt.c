@@ -4,29 +4,7 @@
 #include <string.h>
 #include "matops.h"
 #include "gradops.h"
-
-typedef struct Neuron
-{
-    Value **weights;
-    Value *bias;
-    size_t num_inputs;
-    int use_relu;
-} Neuron;
-
-typedef struct Layer
-{
-    Neuron **neurons;
-    size_t num_neurons;
-    size_t num_inputs;
-    Value **outputs;
-
-} Layer;
-
-typedef struct MLP
-{
-    Layer **layers;
-    size_t num_layers;
-} MLP;
+#include "train.h"
 
 Neuron *create_neuron(size_t num_inputs, int use_relu)
 {
@@ -131,6 +109,13 @@ void zero_gradients(MLP *mlp)
             }
         }
     }
+    //so there is a static part of computation graph i.e. your network weights and biases
+    // and then there is operations you do on them while training/inference
+    // given that operations have to happen every loop of training,
+    // we allow for a temp parameter concept which can be reset so that
+    // there can be reuse of them
+    reset_temp_counter();
+
 }
 
 void free_mlp(MLP *mlp)

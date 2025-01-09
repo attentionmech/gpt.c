@@ -1,3 +1,6 @@
+#ifndef GRADOPS_H
+#define GRADOPS_H
+
 #include <stdlib.h>
 
 typedef struct Value
@@ -23,3 +26,6 @@ Value *sigmoid(Value *self);
 
 void generate_graphviz(Value *v);
 void backward(Value *v);
+
+
+#endif

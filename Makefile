@@ -3,7 +3,7 @@ CFLAGS = -Wall -g
 TARGET = main
 SRCDIR = src
 OBJDIR = obj
-OBJS = $(OBJDIR)/main.o $(OBJDIR)/matops.o $(OBJDIR)/gradops.o $(OBJDIR)/nn.o
+OBJS = $(OBJDIR)/main.o $(OBJDIR)/matops.o $(OBJDIR)/gradops.o $(OBJDIR)/nn.o $(OBJDIR)/train.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET)
@@ -19,6 +19,9 @@ $(OBJDIR)/gradops.o: $(SRCDIR)/gradops.c $(SRCDIR)/gradops.h | $(OBJDIR)
 
 $(OBJDIR)/nn.o: $(SRCDIR)/nn.c $(SRCDIR)/nn.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $(SRCDIR)/nn.c -o $(OBJDIR)/nn.o
+
+$(OBJDIR)/train.o: $(SRCDIR)/train.c $(SRCDIR)/train.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $(SRCDIR)/train.c -o $(OBJDIR)/train.o
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR)

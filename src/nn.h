@@ -1,7 +1,9 @@
+#ifndef NN_H
+#define NN_H
+
 #include "gradops.h"
 
-typedef struct Neuron
-{
+typedef struct Neuron {
     Value **weights;
     Value *bias;
     size_t num_inputs;
@@ -11,9 +13,9 @@ typedef struct Neuron
 Neuron *create_neuron(size_t num_inputs, int use_relu);
 Value *forward_neuron(Neuron *n, Value **inputs);
 
-typedef struct Layer
-{
+typedef struct Layer {
     Neuron **neurons;
+    Value **outputs;  // Added the missing field
     size_t num_neurons;
     size_t num_inputs;
 } Layer;
@@ -21,8 +23,7 @@ typedef struct Layer
 Layer *create_layer(size_t num_inputs, size_t num_neurons, int use_relu);
 Value **forward_layer(Layer *layer, Value **inputs);
 
-typedef struct MLP
-{
+typedef struct MLP {
     Layer **layers;
     size_t num_layers;
 } MLP;
@@ -32,6 +33,7 @@ Value **forward_mlp(MLP *mlp, Value **inputs);
 
 void zero_gradients(MLP *mlp);
 void free_mlp(MLP *mlp);
-
 void print_weights_and_biases(MLP *mlp);
 void reset_temp_counter();
+
+#endif
