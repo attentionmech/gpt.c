@@ -20,7 +20,7 @@ int main()
     size_t layer_sizes[] = {2, 3, 1};
     MLP *mlp = create_mlp(layer_sizes, 3);
 
-    size_t epochs = 100;
+    size_t epochs = 10000;
     float learning_rate = 0.1;
 
     for (size_t epoch = 0; epoch < epochs; epoch++)
