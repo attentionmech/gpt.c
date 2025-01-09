@@ -25,4 +25,5 @@ gpt implemented in C all the way starting from a simple empty while loop
 
 Current State:
 
-- too much object reallocation, design needs to change
+- ~~too much object reallocation, design needs to change~~
+- Gradients are not converging properly
