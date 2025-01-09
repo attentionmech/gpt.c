@@ -4,15 +4,16 @@ gpt implemented in C all the way starting from a simple empty while loop
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
+- [X] Create Feed-Forward Layer  
 - [X] Develop backpropagation 
-- [ ] Implement activation functions (`ReLU`, `Softmax`)  
+- [X] Gradient descent    
+- [X] Implement ReLU
+- [ ] Implement Softmax 
 - [ ] Loss functions (`Cross-Entropy`)
-- [ ] Gradient descent    
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
 - [ ] Implement Layer Normalization  
-- [ ] Create Feed-Forward Layer  
 - [ ] Stack Transformer Blocks  
 - [ ] Build a tokenization system (BPE)  
 - [ ] Implement data batching and shuffling  
