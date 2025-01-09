@@ -14,6 +14,7 @@ typedef struct Value
     char *op;
     void (*_backward)(struct Value *);
     size_t id;
+    double exponent; // to store exponent as constant
 } Value;
 
 size_t node_counter = 0;
@@ -36,6 +37,7 @@ Value *create_value(double data, size_t num_prev, struct Value **prev, const cha
     v->op = op ? strdup(op) : NULL;
     v->_backward = noop_backward;
     v->id = node_counter++;
+    v->exponent = 0;
     return v;
 }
 
@@ -140,20 +142,130 @@ Value *mul(Value *self, Value *other, Value *result, int update)
     return out;
 }
 
-Value *relu(Value *self)
+Value *relu(Value *self, Value *result, int update)
 {
-    Value **prev_nodes = (Value **)malloc(sizeof(Value *));
+    Value **prev_nodes;
+
+    if (update == 1 && result->_prev != NULL)
+    {
+        prev_nodes = result->_prev;
+    }
+    else
+    {
+        prev_nodes = (Value **)malloc(sizeof(Value *));
+    }
+
     if (prev_nodes == NULL)
     {
-        fprintf(stderr, "Memory allocation failed for prev_nodes\n");
+        fprintf(stderr, "Memory allocation failed for prev_nodes in relu\n");
+        return NULL;
+    }
+    if (self == NULL)
+    {
+        fprintf(stderr, "Error: NULL pointer passed to relu function.\n");
         return NULL;
     }
 
     prev_nodes[0] = self;
-    Value *out = create_value(self->data > 0 ? self->data : 0, 1, prev_nodes, "ReLU");
+    Value *out;
+    if (update == 1)
+    {
+        update_value(result, self->data > 0 ? self->data : 0, prev_nodes, 1);
+        out = result;
+    }
+    else
+    {
+        out = create_value(self->data > 0 ? self->data : 0, 1, prev_nodes, "ReLU");
+    }
     out->_backward = relu_backward;
     return out;
 }
+
+Value *power(Value *a, double exponent, Value *result, int update)
+{
+    Value **prev_nodes;
+
+    if (update == 1 && result->_prev != NULL)
+    {
+        prev_nodes = result->_prev;
+    }
+    else
+    {
+        prev_nodes = (Value **)malloc(1 * sizeof(Value *));
+    }
+
+    if (prev_nodes == NULL)
+    {
+        fprintf(stderr, "Memory allocation failed for prev_nodes in power\n");
+        return NULL;
+    }
+    if (a == NULL)
+    {
+        fprintf(stderr, "Error: NULL pointer passed to power function.\n");
+        return NULL;
+    }
+
+    prev_nodes[0] = a;
+    
+    double result_data = pow(a->data, exponent);
+
+    Value *out;
+    if (update == 1)
+    {
+        update_value(result, result_data, prev_nodes, 1);
+        out = result;
+    }
+    else
+    {
+        out = create_value(result_data, 1, prev_nodes, "power");
+    }
+    out->_backward = power_backward;
+    out->exponent = exponent;
+    return out;
+}
+
+Value *sub(Value *a, Value *b, Value *result, int update)
+{
+    Value **prev_nodes;
+
+    if (update == 1 && result->_prev != NULL)
+    {
+        prev_nodes = result->_prev;
+    }
+    else
+    {
+        prev_nodes = (Value **)malloc(2 * sizeof(Value *));
+    }
+
+    if (prev_nodes == NULL)
+    {
+        fprintf(stderr, "Memory allocation failed for prev_nodes in sub\n");
+        return NULL;
+    }
+    if (a == NULL || b == NULL)
+    {
+        fprintf(stderr, "Error: NULL pointer passed to sub function.\n");
+        return NULL;
+    }
+
+    prev_nodes[0] = a;
+    prev_nodes[1] = b;
+    double result_data = a->data - b->data;
+
+    Value *out;
+    if (update == 1)
+    {
+        update_value(result, result_data, prev_nodes, 2);
+        out = result;
+    }
+    else
+    {
+        out = create_value(result_data, 2, prev_nodes, "sub");
+    }
+    out->_backward = sub_backward;
+    return out;
+}
+
 
 void add_backward(Value *out)
 {
@@ -172,19 +284,7 @@ void relu_backward(Value *out)
     out->_prev[0]->grad += (out->data > 0) * out->grad;
 }
 
-Value *sub(Value *a, Value *b)
-{
-    double result = a->data - b->data;
 
-    Value **prev_nodes = (Value **)malloc(2 * sizeof(Value *));
-    prev_nodes[0] = a;
-    prev_nodes[1] = b;
-
-    Value *result_val = create_value(result, 2, prev_nodes, "sub");
-    result_val->_backward = sub_backward;
-
-    return result_val;
-}
 
 void sub_backward(Value *out)
 {
@@ -195,24 +295,11 @@ void sub_backward(Value *out)
     b->grad -= out->grad;
 }
 
-Value *power(Value *a, double exponent)
-{
-    double result = pow(a->data, exponent);
-
-    Value **prev_nodes = (Value **)malloc(2 * sizeof(Value *));
-    prev_nodes[0] = a;
-    prev_nodes[1] = create_value(exponent, 0, NULL, "exponent-val");
-
-    Value *result_val = create_value(result, 2, prev_nodes, "power");
-    result_val->_backward = power_backward;
-
-    return result_val;
-}
 
 void power_backward(Value *out)
 {
     Value *a = out->_prev[0];
-    double exponent = (out->_prev[1])->data;
+    double exponent = out->exponent;
     a->grad += out->grad * (exponent - 1) * a->data;
 }
 
@@ -242,6 +329,7 @@ void backward(Value *v)
 
     for (int i = idx; i > 0; i--)
     {
+        printf("topo: %d %s\n", i, topo[i-1]->op);
         topo[i - 1]->_backward(topo[i - 1]);
     }
 }

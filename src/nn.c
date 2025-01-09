@@ -13,6 +13,7 @@ typedef struct Neuron
     int use_relu;
     Value *add_out;
     Value *mul_out;
+    Value *relu_out;
 } Neuron;
 
 typedef struct Layer
@@ -44,6 +45,7 @@ Neuron *create_neuron(size_t num_inputs, int use_relu)
     n->bias = create_value(0, 0, NULL, "bias");
     n->add_out = create_value(0, 0, NULL, "add_out");
     n->mul_out = create_value(0, 0, NULL, "mul_out");
+    n->relu_out = create_value(0,0,NULL,"relu_out");
 
     return n;
 }
@@ -56,6 +58,8 @@ Layer *create_layer(size_t num_inputs, size_t num_neurons, int use_relu)
     layer->neurons = (Neuron **)malloc(num_neurons * sizeof(Neuron *));
     layer->outputs = (Value **)malloc(num_neurons * sizeof(Value *));
 
+
+    printf("numinputs: %zu num_neurons: %zu use_relu: %d\n", num_inputs, num_neurons, use_relu);
     for (size_t i = 0; i < num_neurons; i++)
     {
         layer->neurons[i] = create_neuron(num_inputs, use_relu);
@@ -74,6 +78,7 @@ MLP *create_mlp(size_t *layer_sizes, size_t num_layers)
     {
         int use_relu = (i != num_layers - 1);
         size_t num_inputs = (i == 0) ? layer_sizes[i] : layer_sizes[i - 1];
+        printf("Creating layer: %zu with relu: %d with inputs: %zu\n", i,use_relu, num_inputs);
         mlp->layers[i] = create_layer(num_inputs, layer_sizes[i], use_relu);
     }
 
@@ -85,11 +90,13 @@ Value *forward_neuron(Neuron *n, Value **inputs)
     Value *output = n->bias;
     Value *add_out = n->add_out;
     Value *mul_out = n->mul_out;
+    Value *relu_out = n->relu_out;
     for (size_t i = 0; i < n->num_inputs; i++)
     {
         output = add(output, mul(inputs[i], n->weights[i], mul_out, 1), add_out, 1);
     }
-    return n->use_relu ? relu(output) : output;
+
+    return n->use_relu ? relu(output, relu_out, 1) : output;
 }
 
 Value **forward_layer(Layer *layer, Value **inputs)
