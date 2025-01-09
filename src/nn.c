@@ -11,9 +11,6 @@ typedef struct Neuron
     Value *bias;
     size_t num_inputs;
     int use_relu;
-    Value *add_out;
-    Value *mul_out;
-    Value *act_out;
 } Neuron;
 
 typedef struct Layer
@@ -38,15 +35,12 @@ Neuron *create_neuron(size_t num_inputs, int use_relu)
     n->use_relu = use_relu;
 
     n->weights = (Value **)malloc(num_inputs * sizeof(Value *));
-    double stddev = sqrt(2.0 / num_inputs);  // This is for ReLU activation
+    double stddev = sqrt(2.0 / num_inputs); // This is for ReLU activation
     for (size_t i = 0; i < num_inputs; i++)
     {
-        n->weights[i] = create_value(((rand() / (double)RAND_MAX) * 2 - 1) * stddev, 0, NULL, "weight");
+        n->weights[i] = create_value(((rand() / (double)RAND_MAX) * 2 - 1) * stddev, 0, NULL, "weight", 0);
     }
-    n->bias = create_value(rand()/(double)RAND_MAX, 0, NULL, "bias");
-    n->add_out = create_value(0, 0, NULL, "add_out");
-    n->mul_out = create_value(0, 0, NULL, "mul_out");
-    n->act_out = create_value(0,0,NULL,"act_out");
+    n->bias = create_value(rand() / (double)RAND_MAX, 0, NULL, "bias", 0);
 
     return n;
 }
@@ -85,16 +79,23 @@ MLP *create_mlp(size_t *layer_sizes, size_t num_layers)
 
 Value *forward_neuron(Neuron *n, Value **inputs)
 {
-    Value *output = n->bias;
-    Value *add_out = n->add_out;
-    Value *mul_out = n->mul_out;
-    Value *act_out = n->act_out;
+    Value *temp;
+
     for (size_t i = 0; i < n->num_inputs; i++)
     {
-        output = add(output, mul(inputs[i], n->weights[i], mul_out, 1), add_out, 1);
+        Value *mul_out = mul(inputs[i], n->weights[i]);
+        if (i > 0)
+        {
+            temp = add(temp, mul_out);
+        }
+        else
+        {
+            temp = mul_out;
+        }
     }
-
-    return n->use_relu ? relu(output, act_out, 1) : sigmoid(output, act_out,1);
+    Value *acc_out = add(n->bias, temp);
+    Value *activation_result = n->use_relu ? relu(acc_out) : sigmoid(acc_out);
+    return activation_result;
 }
 
 Value **forward_layer(Layer *layer, Value **inputs)
@@ -116,38 +117,38 @@ Value **forward_mlp(MLP *mlp, Value **inputs)
     return outputs;
 }
 
-
-void zero_gradients(MLP *mlp) {
-    for (size_t i = 0; i < mlp->num_layers; i++) {
-        for (size_t j = 0; j < mlp->layers[i]->num_neurons; j++) {
+void zero_gradients(MLP *mlp)
+{
+    for (size_t i = 0; i < mlp->num_layers; i++)
+    {
+        for (size_t j = 0; j < mlp->layers[i]->num_neurons; j++)
+        {
             Neuron *neuron = mlp->layers[i]->neurons[j];
             neuron->bias->grad = 0;
-            for (size_t k = 0; k < neuron->num_inputs; k++) {
+            for (size_t k = 0; k < neuron->num_inputs; k++)
+            {
                 neuron->weights[k]->grad = 0;
             }
         }
     }
 }
 
-
-void free_mlp(MLP *mlp) {
-    for (size_t i = 0; i < mlp->num_layers; i++) {
+void free_mlp(MLP *mlp)
+{
+    for (size_t i = 0; i < mlp->num_layers; i++)
+    {
         Layer *layer = mlp->layers[i];
-        for (size_t j = 0; j < layer->num_neurons; j++) {
+        for (size_t j = 0; j < layer->num_neurons; j++)
+        {
             Neuron *neuron = layer->neurons[j];
-            for (size_t k = 0; k < neuron->num_inputs; k++) {
+            for (size_t k = 0; k < neuron->num_inputs; k++)
+            {
                 free(neuron->weights[k]->op);
                 free(neuron->weights[k]);
             }
             free(neuron->weights);
             free(neuron->bias->op);
             free(neuron->bias);
-            free(neuron->add_out->op);
-            free(neuron->add_out);
-            free(neuron->mul_out->op);
-            free(neuron->mul_out);
-            free(neuron->act_out->op);
-            free(neuron->act_out);
             free(neuron);
         }
         free(layer->neurons);
@@ -156,4 +157,25 @@ void free_mlp(MLP *mlp) {
     }
     free(mlp->layers);
     free(mlp);
+}
+
+void print_weights_and_biases(MLP *mlp)
+{
+    for (size_t layer_idx = 0; layer_idx < mlp->num_layers; layer_idx++)
+    {
+        printf("Layer %zu:\n", layer_idx + 1);
+        Layer *layer = mlp->layers[layer_idx];
+        for (size_t neuron_idx = 0; neuron_idx < layer->num_neurons; neuron_idx++)
+        {
+            Neuron *neuron = layer->neurons[neuron_idx];
+            printf("  Neuron %zu:\n", neuron_idx + 1);
+            printf("    Bias: %f\n", neuron->bias->data);
+            printf("    Weights:");
+            for (size_t weight_idx = 0; weight_idx < neuron->num_inputs; weight_idx++)
+            {
+                printf(" %f", neuron->weights[weight_idx]->data);
+            }
+            printf("\n");
+        }
+    }
 }

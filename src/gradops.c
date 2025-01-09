@@ -1,4 +1,6 @@
 #define MAX_PARAMS 100000
+#define MAX_TEMP_PARAMS 100000
+#define TEMP_COUNTER_LOW_BOUND 1000000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,10 +16,11 @@ typedef struct Value
     char *op;
     void (*_backward)(struct Value *);
     size_t id;
-    double exponent; // to store exponent as constant
+    double exponent;
 } Value;
 
 size_t node_counter = 0;
+long temp_node_counter = TEMP_COUNTER_LOW_BOUND;
 
 void add_backward(Value *out);
 void sub_backward(Value *out);
@@ -27,10 +30,11 @@ void relu_backward(Value *out);
 void noop_backward(Value *out);
 void sigmoid_backward(Value *out);
 
-void print_graphviz(Value *v, FILE *f, char *visited);
+void print_graphviz(Value *v, FILE *f, char *visited, char *temp_visited);
 
-Value *create_value(double data, size_t num_prev, struct Value **prev, const char *op)
+Value *create_value(double data, size_t num_prev, struct Value **prev, const char *op, int temp)
 {
+    // printf("create_value called with data: %f, num_prev: %zu, op: %s, temp: %d\n", data, num_prev, op, temp);
     Value *v = (Value *)malloc(sizeof(Value));
     v->data = data;
     v->grad = 0;
@@ -38,22 +42,16 @@ Value *create_value(double data, size_t num_prev, struct Value **prev, const cha
     v->num_prev = num_prev;
     v->op = op ? strdup(op) : NULL;
     v->_backward = noop_backward;
-    v->id = node_counter++;
+    if (temp == 0)
+    {
+        v->id = node_counter++;
+    }
+    else
+    {
+        v->id = temp_node_counter++;
+    }
     v->exponent = 0;
     return v;
-}
-
-void update_value(Value *v, double data, struct Value **prev, size_t num_prev)
-{
-    if (v == NULL)
-    {
-        fprintf(stderr, "Error: NULL pointer passed to update_value.\n");
-        return;
-    }
-    v->data = data;
-    v->grad = 0;
-    v->_prev = prev;
-    v->num_prev = num_prev;
 }
 
 void noop_backward(Value *out)
@@ -61,19 +59,12 @@ void noop_backward(Value *out)
     // nop
 }
 
-Value *add(Value *self, Value *other, Value *result, int update)
+Value *add(Value *self, Value *other)
 {
 
     Value **prev_nodes;
 
-    if (update == 1 && result->_prev != NULL)
-    {
-        prev_nodes = result->_prev;
-    }
-    else
-    {
-        prev_nodes = (Value **)malloc(2 * sizeof(Value *));
-    }
+    prev_nodes = (Value **)malloc(2 * sizeof(Value *));
 
     if (prev_nodes == NULL)
     {
@@ -91,33 +82,20 @@ Value *add(Value *self, Value *other, Value *result, int update)
     prev_nodes[1] = other;
 
     Value *out;
-    if (update == 1)
-    {
-        update_value(result, self->data + other->data, prev_nodes, 2);
-        out = result;
-    }
-    else
-    {
-        out = create_value(self->data + other->data, 2, prev_nodes, "+");
-    }
+
+    out = create_value(self->data + other->data, 2, prev_nodes, "+", 1);
 
     out->_backward = add_backward;
     return out;
 }
 
-Value *mul(Value *self, Value *other, Value *result, int update)
+Value *mul(Value *self, Value *other)
 {
 
     Value **prev_nodes;
 
-    if (update == 1 && result->_prev != NULL)
-    {
-        prev_nodes = result->_prev;
-    }
-    else
-    {
-        prev_nodes = (Value **)malloc(2 * sizeof(Value *));
-    }
+    prev_nodes = (Value **)malloc(2 * sizeof(Value *));
+
     if (prev_nodes == NULL)
     {
         fprintf(stderr, "Memory allocation failed for prev_nodes in mul\n");
@@ -131,31 +109,19 @@ Value *mul(Value *self, Value *other, Value *result, int update)
     prev_nodes[0] = self;
     prev_nodes[1] = other;
     Value *out;
-    if (update == 1)
-    {
-        update_value(result, self->data * other->data, prev_nodes, 2);
-        out = result;
-    }
-    else
-    {
-        out = create_value(self->data * other->data, 2, prev_nodes, "*");
-    }
+
+    out = create_value(self->data * other->data, 2, prev_nodes, "*", 1);
+
     out->_backward = mul_backward;
+
     return out;
 }
 
-Value *relu(Value *self, Value *result, int update)
+Value *relu(Value *self)
 {
     Value **prev_nodes;
 
-    if (update == 1 && result->_prev != NULL)
-    {
-        prev_nodes = result->_prev;
-    }
-    else
-    {
-        prev_nodes = (Value **)malloc(sizeof(Value *));
-    }
+    prev_nodes = (Value **)malloc(sizeof(Value *));
 
     if (prev_nodes == NULL)
     {
@@ -170,31 +136,17 @@ Value *relu(Value *self, Value *result, int update)
 
     prev_nodes[0] = self;
     Value *out;
-    if (update == 1)
-    {
-        update_value(result, self->data > 0 ? self->data : 0, prev_nodes, 1);
-        out = result;
-    }
-    else
-    {
-        out = create_value(self->data > 0 ? self->data : 0, 1, prev_nodes, "act");
-    }
+
+    out = create_value(self->data > 0 ? self->data : 0, 1, prev_nodes, "act", 1);
     out->_backward = relu_backward;
     return out;
 }
 
-Value *power(Value *a, double exponent, Value *result, int update)
+Value *power(Value *a, double exponent)
 {
     Value **prev_nodes;
 
-    if (update == 1 && result->_prev != NULL)
-    {
-        prev_nodes = result->_prev;
-    }
-    else
-    {
-        prev_nodes = (Value **)malloc(1 * sizeof(Value *));
-    }
+    prev_nodes = (Value **)malloc(1 * sizeof(Value *));
 
     if (prev_nodes == NULL)
     {
@@ -212,32 +164,18 @@ Value *power(Value *a, double exponent, Value *result, int update)
     double result_data = pow(a->data, exponent);
 
     Value *out;
-    if (update == 1)
-    {
-        update_value(result, result_data, prev_nodes, 1);
-        out = result;
-    }
-    else
-    {
-        out = create_value(result_data, 1, prev_nodes, "power");
-    }
+
+    out = create_value(result_data, 1, prev_nodes, "power", 1);
     out->_backward = power_backward;
     out->exponent = exponent;
     return out;
 }
 
-Value *sub(Value *a, Value *b, Value *result, int update)
+Value *sub(Value *a, Value *b)
 {
     Value **prev_nodes;
 
-    if (update == 1 && result->_prev != NULL)
-    {
-        prev_nodes = result->_prev;
-    }
-    else
-    {
-        prev_nodes = (Value **)malloc(2 * sizeof(Value *));
-    }
+    prev_nodes = (Value **)malloc(2 * sizeof(Value *));
 
     if (prev_nodes == NULL)
     {
@@ -255,31 +193,18 @@ Value *sub(Value *a, Value *b, Value *result, int update)
     double result_data = a->data - b->data;
 
     Value *out;
-    if (update == 1)
-    {
-        update_value(result, result_data, prev_nodes, 2);
-        out = result;
-    }
-    else
-    {
-        out = create_value(result_data, 2, prev_nodes, "sub");
-    }
+
+    out = create_value(result_data, 2, prev_nodes, "sub", 1);
+
     out->_backward = sub_backward;
     return out;
 }
 
-Value *sigmoid(Value *self, Value *result, int update)
+Value *sigmoid(Value *self)
 {
     Value **prev_nodes;
 
-    if (update == 1 && result->_prev != NULL)
-    {
-        prev_nodes = result->_prev;
-    }
-    else
-    {
-        prev_nodes = (Value **)malloc(sizeof(Value *));
-    }
+    prev_nodes = (Value **)malloc(sizeof(Value *));
 
     if (prev_nodes == NULL)
     {
@@ -297,15 +222,7 @@ Value *sigmoid(Value *self, Value *result, int update)
     Value *out;
     double sigmoid_data = 1 / (1 + exp(-self->data));
 
-    if (update == 1)
-    {
-        update_value(result, sigmoid_data, prev_nodes, 1);
-        out = result;
-    }
-    else
-    {
-        out = create_value(sigmoid_data, 1, prev_nodes, "act");
-    }
+    out = create_value(sigmoid_data, 1, prev_nodes, "act", 1);
 
     out->_backward = sigmoid_backward;
     return out;
@@ -316,8 +233,6 @@ void sigmoid_backward(Value *out)
     Value *a = out->_prev[0];
     a->grad += out->grad * a->data * (1 - a->data);
 }
-
-
 
 void add_backward(Value *out)
 {
@@ -352,17 +267,35 @@ void power_backward(Value *out)
     a->grad += out->grad * (exponent - 1) * a->data;
 }
 
-void build_topo(Value *v, Value **topo, int *idx, char *visited)
+void build_topo(Value *v, Value **topo, int *idx, char *visited, char *temp_visited)
 {
-    if (!visited[v->id] && v != NULL)
+    if (v->id < TEMP_COUNTER_LOW_BOUND)
     {
-        visited[v->id] = 1;
-        for (size_t i = 0; i < v->num_prev; i++)
+        if (!visited[v->id] && v != NULL)
         {
-            build_topo(v->_prev[i], topo, idx, visited);
+            visited[v->id] = 1;
+            // printf("visited[%zu] = %d\n", v->id, temp_visited[v->id]);
+            for (size_t i = 0; i < v->num_prev; i++)
+            {
+                build_topo(v->_prev[i], topo, idx, visited, temp_visited);
+            }
+            topo[*idx] = v;
+            (*idx)++;
         }
-        topo[*idx] = v;
-        (*idx)++;
+    }
+    else
+    {
+        if (!temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] && v != NULL)
+        {
+            temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] = 1;
+            // printf("temp_visited[%zu] = %d\n", v->id - TEMP_COUNTER_LOW_BOUND, temp_visited[v->id - TEMP_COUNTER_LOW_BOUND]);
+            for (size_t i = 0; i < v->num_prev; i++)
+            {
+                build_topo(v->_prev[i], topo, idx, visited, temp_visited);
+            }
+            topo[*idx] = v;
+            (*idx)++;
+        }
     }
 }
 
@@ -371,10 +304,16 @@ void backward(Value *v)
     v->grad = 1.0;
 
     char visited[MAX_PARAMS] = {0};
-    Value *topo[MAX_PARAMS];
+    char temp_visited[MAX_TEMP_PARAMS] = {0};
+    Value *topo[MAX_PARAMS + MAX_TEMP_PARAMS];
     int idx = 0;
 
-    build_topo(v, topo, &idx, visited);
+    build_topo(v, topo, &idx, visited, temp_visited);
+
+    // for(int i =idx ; i>0; i--){
+    //     printf("%zu ", topo[i-1]->id);
+    // }
+    // printf("\n");
 
     for (int i = idx; i > 0; i--)
     {
@@ -384,14 +323,30 @@ void backward(Value *v)
 
 void print_counter()
 {
-    printf("Counter: %zu\n\n", node_counter);
+    printf("Counter: %zu TempCounter: %zu\n\n", node_counter, temp_node_counter);
 }
 
-void print_graphviz(Value *v, FILE *f, char *visited)
+void reset_temp_counter()
 {
-    if (visited[v->id])
+    temp_node_counter = TEMP_COUNTER_LOW_BOUND;
+}
+
+void print_graphviz(Value *v, FILE *f, char *visited, char *temp_visited)
+{
+    if (v->id < TEMP_COUNTER_LOW_BOUND && visited[v->id])
         return;
-    visited[v->id] = 1;
+
+    if (v->id >= TEMP_COUNTER_LOW_BOUND && temp_visited[v->id - TEMP_COUNTER_LOW_BOUND])
+        return;
+
+    if (v->id < TEMP_COUNTER_LOW_BOUND)
+    {
+        visited[v->id] = 1;
+    }
+    else
+    {
+        temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] = 1;
+    }
 
     fprintf(f, "  node%zu [label=\"%.2f (%s)\"];\n", v->id, v->data, v->op);
 
@@ -399,7 +354,7 @@ void print_graphviz(Value *v, FILE *f, char *visited)
     {
         Value *prev_node = v->_prev[i];
         fprintf(f, "  node%zu -> node%zu;\n", prev_node->id, v->id); // directed edge
-        print_graphviz(prev_node, f, visited);
+        print_graphviz(prev_node, f, visited, temp_visited);
     }
 }
 
@@ -415,8 +370,9 @@ void generate_graphviz(Value *v)
     fprintf(f, "digraph G {\n");
 
     char visited[MAX_PARAMS] = {0};
+    char temp_visited[MAX_TEMP_PARAMS] = {0};
 
-    print_graphviz(v, f, visited);
+    print_graphviz(v, f, visited, temp_visited);
 
     fprintf(f, "}\n");
 
