@@ -1,6 +1,6 @@
 # gpt.c
 
-gpt implemented in C all the way starting from a simple empty while loop
+gpt implemented in C
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
