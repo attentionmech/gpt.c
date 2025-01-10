@@ -64,7 +64,6 @@ Value *forward_neuron(Neuron *n, Value **inputs)
     for (size_t i = 0; i < n->num_inputs; i++)
     {
 
-
         Value *mul_out = mul(inputs[i], n->weights[i]);
         if (i > 0)
         {

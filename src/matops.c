@@ -2,76 +2,96 @@
 #include <stdlib.h>
 #include <math.h>
 #include "matops.h"
+#include "gradops.h"
 
-float** addition(float **A, float **B, int rows, int cols) {
-    float **C = (float**)malloc(rows * sizeof(float*));
-    for (int i = 0; i < rows; i++) {
-        C[i] = (float*)malloc(cols * sizeof(float));
+Value **addition(Value **A, Value **B, int rows, int cols)
+{
+    Value **C = (Value **)malloc(rows * sizeof(Value *));
+    for (int i = 0; i < rows; i++)
+    {
+        C[i] = (Value *)malloc(cols * sizeof(Value));
     }
 
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            C[i][j] = A[i][j] + B[i][j];
+    for (int i = 0; i < rows; ++i)
+    {
+        for (int j = 0; j < cols; ++j)
+        {
+
+            C[i][j] = *add(&A[i][j], &B[i][j]);
         }
     }
     return C;
 }
 
-float** transpose(float **A, int rows, int cols) {
-    float **AT = (float**)malloc(cols * sizeof(float*));
-    for (int i = 0; i < cols; i++) {
-        AT[i] = (float*)malloc(rows * sizeof(float));
+Value **transpose(Value **A, int rows, int cols)
+{
+    Value **AT = (Value **)malloc(cols * sizeof(Value *));
+    for (int i = 0; i < cols; i++)
+    {
+        AT[i] = (Value *)malloc(rows * sizeof(Value));
     }
 
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
+    for (int i = 0; i < rows; ++i)
+    {
+        for (int j = 0; j < cols; ++j)
+        {
+
             AT[j][i] = A[i][j];
         }
     }
     return AT;
 }
 
-float** multiply(float **A, float **B, int rows, int cols) {
-    float **C = (float**)malloc(rows * sizeof(float*));
-    for (int i = 0; i < rows; i++) {
-        C[i] = (float*)malloc(cols * sizeof(float));
+Value **multiply(Value **A, Value **B, int rows, int cols)
+{
+    Value **C = (Value **)malloc(rows * sizeof(Value *));
+    for (int i = 0; i < rows; i++)
+    {
+        C[i] = (Value *)malloc(cols * sizeof(Value));
     }
 
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            C[i][j] = A[i][j] * B[i][j];
+    for (int i = 0; i < rows; ++i)
+    {
+        for (int j = 0; j < cols; ++j)
+        {
+
+            C[i][j] = *mul(&A[i][j], &B[i][j]);
         }
     }
     return C;
 }
 
-float* dot_product(float *A, float *B, int size) {
-    float *result = (float*)malloc(sizeof(float));
-    if (result == NULL) {
-        fprintf(stderr, "Memory allocation failed.\n");
-        exit(1);
-    }
-    *result = 0;
-    for (int i = 0; i < size; ++i) {
-        *result += A[i] * B[i];
+Value *dot_product(Value *A, Value *B, int size)
+{
+    Value *result = (Value *)malloc(sizeof(Value));
+    result->data = 0;
+    result->grad = 0;
+
+    for (int i = 0; i < size; ++i)
+    {
+        result->data += A[i].data * B[i].data;
     }
     return result;
 }
 
-float** matmul(float **A, float **B, int m, int n, int p) {
-    float **C = (float**)malloc(m * sizeof(float*));
-    for (int i = 0; i < m; i++) {
-        C[i] = (float*)malloc(p * sizeof(float));
+Value **matmul(Value **A, Value **B, int m, int n, int p)
+{
+    Value **C = (Value **)malloc(m * sizeof(Value *));
+    for (int i = 0; i < m; i++)
+    {
+        C[i] = (Value *)malloc(p * sizeof(Value));
     }
 
-    for (int i = 0; i < m; ++i) {
-        for (int j = 0; j < p; ++j) {
-            C[i][j] = 0;
-            for (int k = 0; k < n; ++k) {
-                C[i][j] += A[i][k] * B[k][j];
+    for (int i = 0; i < m; ++i)
+    {
+        for (int j = 0; j < p; ++j)
+        {
+            C[i][j].data = 0;
+            for (int k = 0; k < n; ++k)
+            {
+                C[i][j] = *add(&C[i][j], mul(&A[i][k], &B[k][j]));
             }
         }
     }
     return C;
 }
-

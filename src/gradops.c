@@ -1,6 +1,6 @@
 #define MAX_PARAMS 1000000
 #define MAX_TEMP_PARAMS 10000000
-#define TEMP_COUNTER_LOW_BOUND  MAX_PARAMS+100
+#define TEMP_COUNTER_LOW_BOUND MAX_PARAMS + 100
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "memgr.h"
-#include "chunked_array.h"  
+#include "chunked_array.h"
 
 size_t node_counter = 0;
 long temp_node_counter = TEMP_COUNTER_LOW_BOUND;
@@ -43,7 +43,8 @@ Value *create_value(double data, size_t num_prev, struct Value **prev, const cha
     }
     v->exponent = 0;
 
-    if(temp){
+    if (temp)
+    {
         mgr_track_value(v);
     }
 
@@ -100,6 +101,7 @@ Value *mul(Value *self, Value *other)
     if (self == NULL || other == NULL)
     {
         fprintf(stderr, "Error: NULL pointer passed to mul function.\n");
+        return NULL;
     }
 
     prev_nodes[0] = self;
@@ -263,8 +265,6 @@ void power_backward(Value *out)
     a->grad += out->grad * (exponent - 1) * a->data;
 }
 
-
-
 void build_topo(Value *v, ChunkedArray *visited, ChunkedArray *temp_visited, ChunkedArray *topo, int *idx)
 {
     if (v->id < TEMP_COUNTER_LOW_BOUND)
@@ -276,7 +276,7 @@ void build_topo(Value *v, ChunkedArray *visited, ChunkedArray *temp_visited, Chu
             {
                 build_topo(v->_prev[i], visited, temp_visited, topo, idx);
             }
-            chunked_array_add(topo, *idx, (Value*)v);
+            chunked_array_add(topo, *idx, (Value *)v);
             (*idx)++;
         }
     }
@@ -289,7 +289,7 @@ void build_topo(Value *v, ChunkedArray *visited, ChunkedArray *temp_visited, Chu
             {
                 build_topo(v->_prev[i], visited, temp_visited, topo, idx);
             }
-            chunked_array_add(topo, *idx, (Value*)v);
+            chunked_array_add(topo, *idx, (Value *)v);
             (*idx)++;
         }
     }
@@ -309,7 +309,8 @@ void backward(Value *v)
     int idx = 0;
     build_topo(v, visited, temp_visited, topo, &idx);
 
-    for (int i = idx; i > 0; i--) {
+    for (int i = idx; i > 0; i--)
+    {
         Value *topo_value = chunked_array_get(topo, i - 1);
         topo_value->_backward(topo_value);
     }
@@ -321,7 +322,7 @@ void backward(Value *v)
 
 void print_counter()
 {
-    printf("Counter: %zu TempCounter: %zu\n\n", node_counter, temp_node_counter-TEMP_COUNTER_LOW_BOUND);
+    printf("Counter: %zu TempCounter: %zu\n\n", node_counter, temp_node_counter - TEMP_COUNTER_LOW_BOUND);
 }
 
 void reset_temp_counter()
@@ -329,9 +330,7 @@ void reset_temp_counter()
     temp_node_counter = TEMP_COUNTER_LOW_BOUND;
 }
 
-
-
-//utils for visualisation; move them somewhere else when done
+// utils for visualisation; move them somewhere else when done
 
 void print_graphviz(Value *v, FILE *f, char *visited, char *temp_visited)
 {
