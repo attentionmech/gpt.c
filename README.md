@@ -9,7 +9,7 @@ gpt implemented in C
 - [X] Implement ReLU and Softmax
 - [X] Loss function MSE
 - [X] XOR Test
-- [ ] Add memory management (object tracking, cleanup)
+- [X] Add memory management (object tracking, cleanup)
 - [ ] MNIST Test [Test failed]
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
