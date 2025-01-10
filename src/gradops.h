@@ -11,6 +11,8 @@ typedef struct Value
     size_t num_prev;
     char *op;
     void (*_backward)(struct Value *);
+    size_t id;
+    double exponent;
 } Value;
 
 void print_counter();

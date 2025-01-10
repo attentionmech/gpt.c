@@ -7,17 +7,9 @@
 #include <math.h>
 #include <string.h>
 
-typedef struct Value
-{
-    double data;
-    double grad;
-    struct Value **_prev;
-    size_t num_prev;
-    char *op;
-    void (*_backward)(struct Value *);
-    size_t id;
-    double exponent;
-} Value;
+#include "memgr.h"
+
+
 
 size_t node_counter = 0;
 long temp_node_counter = TEMP_COUNTER_LOW_BOUND;
@@ -51,6 +43,11 @@ Value *create_value(double data, size_t num_prev, struct Value **prev, const cha
         v->id = temp_node_counter++;
     }
     v->exponent = 0;
+
+    if(temp){
+        mgr_track_value(v);
+    }
+
     return v;
 }
 
@@ -323,7 +320,7 @@ void backward(Value *v)
 
 void print_counter()
 {
-    printf("Counter: %zu TempCounter: %zu\n\n", node_counter, temp_node_counter);
+    printf("Counter: %zu TempCounter: %zu\n\n", node_counter, temp_node_counter-TEMP_COUNTER_LOW_BOUND);
 }
 
 void reset_temp_counter()

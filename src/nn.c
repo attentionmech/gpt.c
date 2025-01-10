@@ -5,6 +5,7 @@
 #include "matops.h"
 #include "gradops.h"
 #include "train.h"
+#include "memgr.h"
 
 Neuron *create_neuron(size_t num_inputs, int use_relu)
 {
@@ -41,6 +42,7 @@ Layer *create_layer(size_t num_inputs, size_t num_neurons, int use_relu)
 
 MLP *create_mlp(size_t *layer_sizes, size_t num_layers)
 {
+    mgr_init();
     MLP *mlp = (MLP *)malloc(sizeof(MLP));
     mlp->num_layers = num_layers;
     mlp->layers = (Layer **)malloc(num_layers * sizeof(Layer *));
@@ -115,6 +117,11 @@ void zero_gradients(MLP *mlp)
     // we allow for a temp parameter concept which can be reset so that
     // there can be reuse of them
     reset_temp_counter();
+
+
+    //temp cleanup
+    mgr_cleanup();
+
 
 }
 
