@@ -1,8 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "nn.h"
-
-void update_weights(MLP *mlp, float learning_rate);
+#include "train.h"
 
 int main()
 {
@@ -19,11 +18,11 @@ int main()
         create_value(1.0, 0, NULL, "target", 0),
         create_value(0.0, 0, NULL, "target", 0)};
 
-    size_t layer_sizes[] = {2, 30,30, 1};
+    size_t layer_sizes[] = {2, 32, 1};
     MLP *mlp = create_mlp(layer_sizes, 3);
 
-    size_t epochs = 10000;
-    float learning_rate = 0.01;
+    size_t epochs = 100000;
+    float learning_rate = 0.001;
 
     for (size_t epoch = 0; epoch < epochs; epoch++)
     {
@@ -39,7 +38,7 @@ int main()
             total_loss += loss->data;
             backward(loss);
         }
-        update_weights(mlp, learning_rate);
+        update_weights_with_momentum(mlp, learning_rate,0.1);
         printf("Epoch %zu: Loss = %f\n", epoch + 1, total_loss / 4);
     }
 

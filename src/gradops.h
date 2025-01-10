@@ -13,6 +13,10 @@ typedef struct Value
     void (*_backward)(struct Value *);
     size_t id;
     double exponent;
+
+
+    //optimiser related vars
+    float prev_update; // for momentum, TODO: come up with better structure
 } Value;
 
 void print_counter();
