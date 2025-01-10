@@ -9,8 +9,6 @@
 
 #include "memgr.h"
 
-
-
 size_t node_counter = 0;
 long temp_node_counter = TEMP_COUNTER_LOW_BOUND;
 
@@ -271,7 +269,6 @@ void build_topo(Value *v, Value **topo, int *idx, char *visited, char *temp_visi
         if (!visited[v->id] && v != NULL)
         {
             visited[v->id] = 1;
-            // printf("visited[%zu] = %d\n", v->id, temp_visited[v->id]);
             for (size_t i = 0; i < v->num_prev; i++)
             {
                 build_topo(v->_prev[i], topo, idx, visited, temp_visited);
@@ -285,7 +282,6 @@ void build_topo(Value *v, Value **topo, int *idx, char *visited, char *temp_visi
         if (!temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] && v != NULL)
         {
             temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] = 1;
-            // printf("temp_visited[%zu] = %d\n", v->id - TEMP_COUNTER_LOW_BOUND, temp_visited[v->id - TEMP_COUNTER_LOW_BOUND]);
             for (size_t i = 0; i < v->num_prev; i++)
             {
                 build_topo(v->_prev[i], topo, idx, visited, temp_visited);
@@ -296,26 +292,40 @@ void build_topo(Value *v, Value **topo, int *idx, char *visited, char *temp_visi
     }
 }
 
+
 void backward(Value *v)
 {
     v->grad = 1.0;
 
-    char visited[MAX_PARAMS] = {0};
-    char temp_visited[MAX_TEMP_PARAMS] = {0};
-    Value *topo[MAX_PARAMS + MAX_TEMP_PARAMS];
-    int idx = 0;
+    char *visited = (char *)malloc(MAX_PARAMS * sizeof(char));
+    char *temp_visited = (char *)malloc(MAX_TEMP_PARAMS * sizeof(char));
 
+    if (visited == NULL || temp_visited == NULL) {
+        printf("Memory allocation failed!\n");
+        return;
+    }
+
+    memset(visited, 0, MAX_PARAMS * sizeof(char));
+    memset(temp_visited, 0, MAX_TEMP_PARAMS * sizeof(char));
+
+    Value **topo = (Value **)malloc((MAX_PARAMS + MAX_TEMP_PARAMS) * sizeof(Value *));
+    if (topo == NULL) {
+        printf("Memory allocation for topo failed!\n");
+        free(visited);
+        free(temp_visited);
+        return;
+    }
+
+    int idx = 0;
     build_topo(v, topo, &idx, visited, temp_visited);
 
-    // for(int i =idx ; i>0; i--){
-    //     printf("%zu ", topo[i-1]->id);
-    // }
-    // printf("\n");
-
-    for (int i = idx; i > 0; i--)
-    {
+    for (int i = idx; i > 0; i--) {
         topo[i - 1]->_backward(topo[i - 1]);
     }
+
+    free(visited);
+    free(temp_visited);
+    free(topo);
 }
 
 void print_counter()
@@ -327,6 +337,10 @@ void reset_temp_counter()
 {
     temp_node_counter = TEMP_COUNTER_LOW_BOUND;
 }
+
+
+
+//utils for visualisation; move them somewhere else when done
 
 void print_graphviz(Value *v, FILE *f, char *visited, char *temp_visited)
 {

@@ -18,7 +18,7 @@ int main()
         create_value(1.0, 0, NULL, "target", 0),
         create_value(0.0, 0, NULL, "target", 0)};
 
-    size_t layer_sizes[] = {2, 32, 1};
+    size_t layer_sizes[] = {2, 4, 1};
     MLP *mlp = create_mlp(layer_sizes, 3);
 
     size_t epochs = 100000;
@@ -26,6 +26,7 @@ int main()
 
     for (size_t epoch = 0; epoch < epochs; epoch++)
     {
+        print_counter();
         float total_loss = 0.0;
         zero_gradients(mlp);
 

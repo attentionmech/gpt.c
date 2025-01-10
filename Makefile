@@ -3,7 +3,7 @@ CFLAGS = -Wall -g
 TARGET = main
 SRCDIR = src
 OBJDIR = obj
-OBJS = $(OBJDIR)/main.o $(OBJDIR)/matops.o $(OBJDIR)/gradops.o $(OBJDIR)/nn.o $(OBJDIR)/train.o $(OBJDIR)/memgr.o
+OBJS = $(OBJDIR)/main.o $(OBJDIR)/matops.o $(OBJDIR)/gradops.o $(OBJDIR)/nn.o $(OBJDIR)/train.o $(OBJDIR)/memgr.o $(OBJDIR)/chunked_array.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET)
@@ -25,6 +25,10 @@ $(OBJDIR)/train.o: $(SRCDIR)/train.c $(SRCDIR)/train.h | $(OBJDIR)
 
 $(OBJDIR)/memgr.o: $(SRCDIR)/memgr.c $(SRCDIR)/memgr.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $(SRCDIR)/memgr.c -o $(OBJDIR)/memgr.o
+
+$(OBJDIR)/chunked_array.o: $(SRCDIR)/chunked_array.c $(SRCDIR)/chunked_array.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $(SRCDIR)/chunked_array.c -o $(OBJDIR)/chunked_array.o
+
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
