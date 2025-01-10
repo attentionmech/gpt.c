@@ -9,7 +9,8 @@ gpt implemented in C
 - [X] Implement ReLU and Softmax
 - [X] Loss function MSE
 - [X] XOR Test
-- [ ] MNIST Test
+- [ ] Add memory management (object tracking, cleanup)
+- [ ] MNIST Test [Test failed]
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
@@ -27,3 +28,4 @@ Current State:
 
 - ~~too much object reallocation, design needs to change~~
 - ~~Gradients are not converging properly~~
+- MNIST Test failed because of memory leaks. 
