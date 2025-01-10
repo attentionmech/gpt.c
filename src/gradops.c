@@ -1,6 +1,6 @@
 #define MAX_PARAMS 1000000
 #define MAX_TEMP_PARAMS 10000000
-#define TEMP_COUNTER_LOW_BOUND  MAX_TEMP_PARAMS+100
+#define TEMP_COUNTER_LOW_BOUND  MAX_PARAMS+100
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "memgr.h"
-#include "chunked_array.h"
+#include "chunked_array.h"  
 
 size_t node_counter = 0;
 long temp_node_counter = TEMP_COUNTER_LOW_BOUND;

@@ -64,10 +64,6 @@ Value *forward_neuron(Neuron *n, Value **inputs)
     for (size_t i = 0; i < n->num_inputs; i++)
     {
 
-        if (fabs(inputs[i]->data) > 1e6 || fabs(n->weights[i]->data) > 1e6)
-        {
-            printf("Possible overflow detected!\n");
-        }
 
         Value *mul_out = mul(inputs[i], n->weights[i]);
         if (i > 0)
