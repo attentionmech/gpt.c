@@ -18,7 +18,7 @@ int main()
         create_value(1.0, 0, NULL, "target", 0),
         create_value(0.0, 0, NULL, "target", 0)};
 
-    size_t layer_sizes[] = {2, 4, 1};
+    size_t layer_sizes[] = {2, 3, 1};
     MLP *mlp = create_mlp(layer_sizes, 3);
 
     size_t epochs = 100000;
@@ -35,11 +35,13 @@ int main()
             Value **inputs = xor_inputs[i];
             Value *target = xor_targets[i];
             Value **outputs = forward_mlp(mlp, inputs);
+
             Value *loss = power(sub(outputs[0], target), 2);
             total_loss += loss->data;
+
             backward(loss);
         }
-        update_weights_with_momentum(mlp, learning_rate,0.1);
+        update_weights(mlp, learning_rate);
         printf("Epoch %zu: Loss = %f\n", epoch + 1, total_loss / 4);
     }
 

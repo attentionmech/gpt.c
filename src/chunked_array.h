@@ -4,7 +4,7 @@
 #include "gradops.h"
 
 typedef struct Chunk {
-    Value *data;
+    Value **data;
 } Chunk;
 
 typedef struct ChunkedArray {

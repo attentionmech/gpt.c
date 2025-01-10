@@ -59,10 +59,16 @@ MLP *create_mlp(size_t *layer_sizes, size_t num_layers)
 
 Value *forward_neuron(Neuron *n, Value **inputs)
 {
-    Value *temp;
+    Value *temp = NULL;
 
     for (size_t i = 0; i < n->num_inputs; i++)
     {
+
+        if (fabs(inputs[i]->data) > 1e6 || fabs(n->weights[i]->data) > 1e6)
+        {
+            printf("Possible overflow detected!\n");
+        }
+
         Value *mul_out = mul(inputs[i], n->weights[i]);
         if (i > 0)
         {
@@ -111,18 +117,15 @@ void zero_gradients(MLP *mlp)
             }
         }
     }
-    //so there is a static part of computation graph i.e. your network weights and biases
-    // and then there is operations you do on them while training/inference
-    // given that operations have to happen every loop of training,
-    // we allow for a temp parameter concept which can be reset so that
-    // there can be reuse of them
+    // so there is a static part of computation graph i.e. your network weights and biases
+    //  and then there is operations you do on them while training/inference
+    //  given that operations have to happen every loop of training,
+    //  we allow for a temp parameter concept which can be reset so that
+    //  there can be reuse of them
     reset_temp_counter();
 
-
-    //temp cleanup
+    // temp cleanup
     mgr_cleanup();
-
-
 }
 
 void free_mlp(MLP *mlp)

@@ -38,30 +38,39 @@ void chunked_array_add(ChunkedArray *chunked_array, int index, Value *value) {
 
     if (chunked_array->index_array[chunk_index] == NULL) {
         Chunk *new_chunk = (Chunk *)malloc(sizeof(Chunk));
-        new_chunk->data = (Value *)malloc(chunked_array->chunk_size * sizeof(int));
+        new_chunk->data = (Value **)calloc(chunked_array->chunk_size, sizeof(Value*));
+        
+        for (int i = 0; i < chunked_array->chunk_size; i++) {
+            new_chunk->data[i] = NULL;
+        }
+
         chunked_array->index_array[chunk_index] = new_chunk;
         chunked_array->total_chunks++;
     }
 
-    chunked_array->index_array[chunk_index]->data[position_in_chunk] = *value;
+    chunked_array->index_array[chunk_index]->data[position_in_chunk] = value;
 }
 
 Value* chunked_array_get(ChunkedArray *chunked_array, int index) {
     int chunk_index = index / chunked_array->chunk_size;
     int position_in_chunk = index % chunked_array->chunk_size;
 
+    // printf("%d %d", chunk_index, position_in_chunk);
+
     if (chunk_index >= chunked_array->total_chunks || chunked_array->index_array[chunk_index] == NULL) {
-        fprintf(stderr, "Index out of bounds\n");
+        // fprintf(stdout, "Index out of bounds\n");
         return NULL;
     }
 
-    return &(chunked_array->index_array[chunk_index]->data[position_in_chunk]);
+    return chunked_array->index_array[chunk_index]->data[position_in_chunk];
 }
 
 void chunked_array_cleanup(ChunkedArray *chunked_array) {
     for (int i = 0; i < chunked_array->total_chunks; i++) {
-        free(chunked_array->index_array[i]->data);
-        free(chunked_array->index_array[i]);
+        if (chunked_array->index_array[i] != NULL) { // Check if chunk exists
+            free(chunked_array->index_array[i]->data);
+            free(chunked_array->index_array[i]);
+        }
     }
     free(chunked_array->index_array);
     free(chunked_array);

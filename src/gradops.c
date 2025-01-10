@@ -1,6 +1,6 @@
-#define MAX_PARAMS 100000
-#define MAX_TEMP_PARAMS 100000
-#define TEMP_COUNTER_LOW_BOUND 1000000
+#define MAX_PARAMS 1000000
+#define MAX_TEMP_PARAMS 10000000
+#define TEMP_COUNTER_LOW_BOUND  MAX_TEMP_PARAMS+100
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "memgr.h"
+#include "chunked_array.h"
 
 size_t node_counter = 0;
 long temp_node_counter = TEMP_COUNTER_LOW_BOUND;
@@ -262,70 +263,60 @@ void power_backward(Value *out)
     a->grad += out->grad * (exponent - 1) * a->data;
 }
 
-void build_topo(Value *v, Value **topo, int *idx, char *visited, char *temp_visited)
+
+
+void build_topo(Value *v, ChunkedArray *visited, ChunkedArray *temp_visited, ChunkedArray *topo, int *idx)
 {
     if (v->id < TEMP_COUNTER_LOW_BOUND)
     {
-        if (!visited[v->id] && v != NULL)
+        if (!chunked_array_get(visited, v->id))
         {
-            visited[v->id] = 1;
+            chunked_array_add(visited, v->id, v);
             for (size_t i = 0; i < v->num_prev; i++)
             {
-                build_topo(v->_prev[i], topo, idx, visited, temp_visited);
+                build_topo(v->_prev[i], visited, temp_visited, topo, idx);
             }
-            topo[*idx] = v;
+            chunked_array_add(topo, *idx, (Value*)v);
             (*idx)++;
         }
     }
     else
     {
-        if (!temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] && v != NULL)
+        if (!chunked_array_get(temp_visited, v->id - TEMP_COUNTER_LOW_BOUND))
         {
-            temp_visited[v->id - TEMP_COUNTER_LOW_BOUND] = 1;
+            chunked_array_add(temp_visited, v->id - TEMP_COUNTER_LOW_BOUND, v);
             for (size_t i = 0; i < v->num_prev; i++)
             {
-                build_topo(v->_prev[i], topo, idx, visited, temp_visited);
+                build_topo(v->_prev[i], visited, temp_visited, topo, idx);
             }
-            topo[*idx] = v;
+            chunked_array_add(topo, *idx, (Value*)v);
             (*idx)++;
         }
     }
 }
 
-
 void backward(Value *v)
 {
     v->grad = 1.0;
 
-    char *visited = (char *)malloc(MAX_PARAMS * sizeof(char));
-    char *temp_visited = (char *)malloc(MAX_TEMP_PARAMS * sizeof(char));
+    int max_params = MAX_PARAMS;
+    int max_temp_params = MAX_TEMP_PARAMS;
 
-    if (visited == NULL || temp_visited == NULL) {
-        printf("Memory allocation failed!\n");
-        return;
-    }
-
-    memset(visited, 0, MAX_PARAMS * sizeof(char));
-    memset(temp_visited, 0, MAX_TEMP_PARAMS * sizeof(char));
-
-    Value **topo = (Value **)malloc((MAX_PARAMS + MAX_TEMP_PARAMS) * sizeof(Value *));
-    if (topo == NULL) {
-        printf("Memory allocation for topo failed!\n");
-        free(visited);
-        free(temp_visited);
-        return;
-    }
+    ChunkedArray *visited = chunked_array_init(max_params, 1000);
+    ChunkedArray *temp_visited = chunked_array_init(max_temp_params, 1000);
+    ChunkedArray *topo = chunked_array_init(max_params + max_temp_params, 1000);
 
     int idx = 0;
-    build_topo(v, topo, &idx, visited, temp_visited);
+    build_topo(v, visited, temp_visited, topo, &idx);
 
     for (int i = idx; i > 0; i--) {
-        topo[i - 1]->_backward(topo[i - 1]);
+        Value *topo_value = chunked_array_get(topo, i - 1);
+        topo_value->_backward(topo_value);
     }
 
-    free(visited);
-    free(temp_visited);
-    free(topo);
+    chunked_array_cleanup(visited);
+    chunked_array_cleanup(temp_visited);
+    chunked_array_cleanup(topo);
 }
 
 void print_counter()
