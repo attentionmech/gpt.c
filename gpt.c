@@ -23,7 +23,7 @@ typedef struct
     double value;
     double gradient;
     OperationType operation;
-    int dependencies[2];
+    int *dependencies;
     int num_dependencies;
     int learnable_param;
 } Slot;
@@ -62,11 +62,10 @@ int create_value_slot(double value, int learnable_param)
     return increment_slot();
 }
 
-int create_operation_slot(OperationType op, int dep1, int dep2)
+int create_operation_slot(OperationType op, int* dep)
 {
     slots[slot_count].operation = op;
-    slots[slot_count].dependencies[0] = dep1;
-    slots[slot_count].dependencies[1] = dep2;
+    slots[slot_count].dependencies = dep;
     slots[slot_count].num_dependencies = 2;
     slots[slot_count].gradient = 0.0;
     slots[slot_count].learnable_param = 0;
@@ -83,30 +82,61 @@ double get_value_slot(int slot)
     return slots[slot].value;
 }
 
+
+double _sum(double *list, int length)
+{
+    double total = 0.0;
+    for (int i = 0; i < length; i++)
+    {
+        total += list[i];
+    }
+    return total;
+}
+
+double _mul(double *list, int length)
+{
+    double total = 1.0;
+    for (int i = 0; i < length; i++)
+    {
+        total *= list[i];
+    }
+    return total;
+}
+
+double mean_squared(double *list, int length)
+{
+    double sum = 0.0;
+    for (int i = 0; i < length; i++)
+    {
+        sum += list[i] * list[i];
+    }
+    return sum / length;
+}
+
+
 double compute_graph(int slot)
 {
     Slot *s = &slots[slot];
     if (s->num_dependencies > 0)
     {
-        double dep1_value = (s->num_dependencies > 0) ? compute_graph(s->dependencies[0]) : 0.0;
-        double dep2_value = (s->num_dependencies > 1) ? compute_graph(s->dependencies[1]) : 0.0;
+        double dep_value[s->num_dependencies];
+        for (int j=0; j< s->num_dependencies; j++){
+            dep_value[j] = compute_graph(s->dependencies[j]);
+        }
 
         switch (s->operation)
         {
         case ADD:
-            s->value = dep1_value + dep2_value;
+            s->value = _sum(dep_value, s->num_dependencies);
             break;
         case MULTIPLY:
-            s->value = dep1_value * dep2_value;
+            s->value = _mul(dep_value, s->num_dependencies);
             break;
         case SIGMOID:
-            s->value = 1.0 / (1.0 + exp(-dep1_value));
+            s->value = 1.0 / (1.0 + exp(-dep_value[0]));
             break;
         case RELU:
-            s->value = fmax(0.0, dep1_value);
-            break;
-        case MSE:
-            s->value = (dep1_value - dep2_value) * (dep1_value - dep2_value);
+            s->value = fmax(0.0, dep_value[0]);
             break;
         default:
             break;
@@ -146,9 +176,6 @@ void compute_grad(int slot)
             }
             break;
 
-        case MSE:
-            slots[s->dependencies[0]].gradient += 2.0 * s->gradient * (dep1_value - dep2_value);
-            break;
         default:
             break;
         }
@@ -160,7 +187,7 @@ void compute_grad(int slot)
     }
 }
 
-int create_feedforward_network(int *layer_sizes, int num_layers)
+int* create_feedforward_network(int *layer_sizes, int num_layers)
 {
     int *prev_layer_slots = NULL;
     int *curr_layer_slots = NULL;
@@ -186,7 +213,7 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
                 for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
                 {
                     int weight = create_value_slot(0.1, 1);
-                    int mul = create_operation_slot(MULTIPLY, prev_layer_slots[prev], weight);
+                    int mul = create_operation_slot(MULTIPLY, (int[]){prev_layer_slots[prev], weight});
 
                     if (sum == -1)
                     {
@@ -194,14 +221,14 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
                     }
                     else
                     {
-                        sum = create_operation_slot(ADD, sum, mul);
+                        sum = create_operation_slot(ADD, (int[]){sum, mul});
                     }
                 }
 
                 int bias = create_value_slot(0.0, 1);
-                int biased = create_operation_slot(ADD, sum, bias);
+                int biased = create_operation_slot(ADD, (int[]){sum, bias});
 
-                curr_layer_slots[neuron] = create_operation_slot(RELU, biased, 0);
+                curr_layer_slots[neuron] = create_operation_slot(RELU, (int[]){biased});
             }
         }
 
@@ -209,11 +236,11 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
         prev_layer_slots = curr_layer_slots;
     }
 
-    curr_slot = curr_layer_slots[0];
+    // curr_slot = curr_layer_slots[0];
 
-    free(curr_layer_slots);
+    // free(curr_layer_slots);
 
-    return curr_slot;
+    return curr_layer_slots;
 }
 
 void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double learning_rate)
@@ -221,10 +248,10 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
     int layer_sizes[] = {IMAGE_SIZE,  10, 1}; // 784 inputs, 128 hidden, 10 output neurons
     int num_layers = 3;
 
-    int final_output = create_feedforward_network(layer_sizes, num_layers);
+    int* final_outputs = create_feedforward_network(layer_sizes, num_layers);
 
     int target_slot = create_value_slot(0.0, 0);
-    int loss_slot = create_operation_slot(MSE, final_output, target_slot);
+    int loss_slot = create_operation_slot(MSE, final_outputs);
 
     srand(time(NULL));
 
