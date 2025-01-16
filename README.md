@@ -10,7 +10,7 @@ gpt implemented in C [ongoing dev]
 - [X] Loss function MSE
 - [X] XOR Test
 - [X] Add memory management (object tracking, cleanup)
-- [ ] MNIST Test [Test failed]
+- [X] MNIST Test
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
