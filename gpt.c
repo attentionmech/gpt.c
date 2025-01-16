@@ -33,6 +33,58 @@ typedef struct
 Slot slots[MAX_SLOTS];
 int slot_count = 0;
 
+#include <stdio.h>
+
+// Helper function to map OperationType enum to strings
+const char* get_operation_name(OperationType op)
+{
+    switch (op)
+    {
+        case ADD:       return "ADD";
+        case MULTIPLY:  return "MULTIPLY";
+        case SUB:       return "SUB";
+        case POW2:      return "POW2";
+        case SIGMOID:   return "SIGMOID";
+        case RELU:      return "RELU";
+        case PARAMETER: return "PARAM";
+        default:        return "UNKNOWN";
+    }
+}
+
+void export_graph_to_dot(const char *filename)
+{
+    FILE *file = fopen(filename, "w");
+    if (!file)
+    {
+        fprintf(stderr, "Error opening file for writing Graphviz DOT file.\n");
+        return;
+    }
+
+    fprintf(file, "digraph ComputationalGraph {\n");
+    fprintf(file, "    node [shape=circle, style=filled, fillcolor=lightblue];\n");
+
+    for (int i = 0; i < slot_count; i++)
+    {
+        Slot *s = &slots[i];
+        // Node definition with value, gradient, and operation type
+        fprintf(file, "    slot_%d [label=\"%d\\nVal: %.2f\\nGrad: %.2f\\nOp: %s\"];\n",
+                i, i, s->value, s->gradient, get_operation_name(s->operation));
+
+        // Edge definitions based on dependencies
+        for (int j = 0; j < s->num_dependencies; j++)
+        {
+            fprintf(file, "    slot_%d -> slot_%d;\n", s->dependencies[j], i);
+        }
+    }
+
+    fprintf(file, "}\n");
+    fclose(file);
+    printf("Graph exported to %s. Use 'dot -Tpng %s -o graph.png' to generate an image.\n", filename, filename);
+}
+
+
+
+
 double random_init()
 {
     return (rand() / (double)RAND_MAX) * 2.0 - 1.0;
@@ -157,7 +209,7 @@ double compute_graph(int slot)
 
 void compute_grad(int slot)
 {
-    printf("Computing gradient for slot %d with operation %d\n", slot, slots[slot].operation);
+    // printf("Computing gradient for slot %d with operation %d\n", slot, slots[slot].operation);
     Slot *s = &slots[slot];
 
     if (s->num_dependencies > 0)
@@ -222,6 +274,19 @@ void compute_grad(int slot)
     }
 }
 
+int *wrap_value_in_array(int a){
+    int *arr = malloc(1*sizeof(int));
+    arr[0] = a;
+    return arr;
+}
+
+int *wrap_in_array(int a, int b){
+    int *arr = malloc(2*sizeof(int));
+    arr[0] = a;
+    arr[1] = b;
+    return arr;
+}
+
 
 int* create_feedforward_network(int *layer_sizes, int num_layers)
 {
@@ -249,7 +314,7 @@ int* create_feedforward_network(int *layer_sizes, int num_layers)
                 for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
                 {
                     int weight = create_value_slot(0.1, 1);
-                    int mul = create_operation_slot(MULTIPLY, (int[]){prev_layer_slots[prev], weight}, 2);
+                    int mul = create_operation_slot(MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2);
 
                     if (sum == -1)
                     {
@@ -257,14 +322,14 @@ int* create_feedforward_network(int *layer_sizes, int num_layers)
                     }
                     else
                     {
-                        sum = create_operation_slot(ADD, (int[]){sum, mul}, 2);
+                        sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2);
                     }
                 }
 
                 int bias = create_value_slot(0.0, 1);
-                int biased = create_operation_slot(ADD, (int[]){sum, bias},2);
+                int biased = create_operation_slot(ADD, wrap_in_array(sum, bias),2);
 
-                curr_layer_slots[neuron] = create_operation_slot(RELU, (int[]){biased}, 1);
+                curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1);
             }
         }
 
@@ -284,25 +349,26 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
     int num_outputs = 10;
 
 
-    int layer_sizes[] = {num_inputs,  num_outputs}; // 784 inputs, 128 hidden, 10 output neurons
-    int num_layers = 2;
+    int layer_sizes[] = {num_inputs, 32,32, num_outputs}; // 784 inputs, 128 hidden, 10 output neurons
+    int num_layers = 4;
 
-    int* output_slots = create_feedforward_network(layer_sizes, num_layers);
+    int *output_slots = create_feedforward_network(layer_sizes, num_layers);
     int target_slots[num_outputs];
     int diff_slots[num_outputs];
 
-    for(int i=0; i< 10; i++){
+    for(int i=0; i< num_outputs; i++){
         target_slots[i] = create_value_slot(0.0, 0);
-        int temp = create_operation_slot(SUB, (int[]){target_slots[i], output_slots[i]},2);
-        diff_slots[i] = create_operation_slot(POW2, (int[]){temp}, 1);
+        int temp = create_operation_slot(SUB, wrap_in_array(target_slots[i], output_slots[i]),2);
+        diff_slots[i] = create_operation_slot(POW2, wrap_value_in_array(temp), 1);
     }
 
     int loss_slot = create_operation_slot(ADD, diff_slots,num_outputs);
 
     srand(time(NULL));
 
+    // export_graph_to_dot("test.dot");
 
-    for (int epoch = 0; epoch < 1000000; epoch++) // Reduced number of epochs
+    for (int epoch = 0; epoch < 100; epoch++) // Reduced number of epochs
     {
         double total_loss = 0.0;
 
@@ -336,7 +402,7 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
 
 
             slots[loss_slot].gradient = 1.0;
-            // compute_grad(loss_slot);
+            compute_grad(loss_slot);
 
             for (int j = 0; j < slot_count; j++)
             {
@@ -360,7 +426,7 @@ int main()
         return 1;
     }
 
-    int num_samples = 100;
+    int num_samples = 50;
     double inputs[num_samples][IMAGE_SIZE];
     int labels[num_samples];
 
@@ -382,7 +448,7 @@ int main()
 
     fclose(file);
 
-    double learning_rate = 0.001;
+    double learning_rate = 0.0001;
 
     train(inputs, labels, num_samples, learning_rate);
 
