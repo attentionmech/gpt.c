@@ -31,6 +31,8 @@ typedef struct
     int num_dependencies;
     int learnable_param;
     int visited;
+    double momentum;
+    double rms;
 } Slot;
 
 Slot slots[MAX_SLOTS];
@@ -208,7 +210,7 @@ double compute_graph(int slot)
             s->value = dep_value[0] / dep_value[1];
             break;
 
-         case NEG:
+        case NEG:
             s->value = -dep_value[0];
             break;
 
@@ -217,10 +219,10 @@ double compute_graph(int slot)
             break;
 
         case SUB:
-            s->value = dep_value[0] - dep_value[1]; 
+            s->value = dep_value[0] - dep_value[1];
             break;
         case POW2:
-            s->value = dep_value[0] * dep_value[0]; 
+            s->value = dep_value[0] * dep_value[0];
             break;
         case SIGMOID:
             s->value = 1.0 / (1.0 + exp(-dep_value[0]));
@@ -336,11 +338,25 @@ int *wrap_in_array(int a, int b)
     return arr;
 }
 
+double xavier_init(int fan_in, int fan_out)
+{
+    double limit = sqrt(6.0 / (fan_in + fan_out));
+    return ((double)rand() / RAND_MAX * 2.0 - 1.0) * limit;
+}
+
+double he_init(int fan_in)
+{
+    double std = sqrt(2.0 / fan_in);
+    // Box-Muller transform for normal distribution
+    double u1 = (double)rand() / RAND_MAX;
+    double u2 = (double)rand() / RAND_MAX;
+    return std * sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+}
+
 int *create_feedforward_network(int *layer_sizes, int num_layers)
 {
     int *prev_layer_slots = NULL;
     int *curr_layer_slots = NULL;
-    int curr_slot = 0;
 
     for (int layer = 0; layer < num_layers; layer++)
     {
@@ -348,7 +364,7 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
 
         if (layer == 0)
         {
-            // Input layer (no batch norm required here)
+            // Input layer
             for (int i = 0; i < layer_sizes[layer]; i++)
             {
                 curr_layer_slots[i] = create_value_slot(0.0, 0);
@@ -361,8 +377,8 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                 int sum = -1;
                 for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
                 {
-                    double random_value = (double)rand() / RAND_MAX;
-                    int weight = create_value_slot(random_value, 1);
+                    double weight_init = he_init(layer_sizes[layer - 1]);
+                    int weight = create_value_slot(weight_init, 1);
                     int mul = create_operation_slot(MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2);
 
                     if (sum == -1)
@@ -375,9 +391,8 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                     }
                 }
 
-                int bias = create_value_slot(0.0, 1);
+                int bias = create_value_slot(0.01, 1);
                 int biased = create_operation_slot(ADD, wrap_in_array(sum, bias), 2);
-
                 curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1);
             }
         }
@@ -391,36 +406,27 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
 
 int *create_softmax_layer(int *input_slots, int num_outputs)
 {
-    double max_val = -INFINITY;
-    double *input_values = malloc(num_outputs * sizeof(double));
+
+    int *exp_slots = malloc(num_outputs * sizeof(int));
 
     for (int i = 0; i < num_outputs; i++)
     {
-        input_values[i] = get_value_slot(input_slots[i]);
-        if (input_values[i] > max_val)
-        {
-            max_val = input_values[i];
-        }
+        exp_slots[i] = create_operation_slot(EXP, wrap_value_in_array(input_slots[i]), 1);
     }
 
-    double sum_exp = 0.0;
-    double *exp_values = malloc(num_outputs * sizeof(double));
-    for (int i = 0; i < num_outputs; i++)
+    int sum_slot = exp_slots[0];
+    for (int i = 1; i < num_outputs; i++)
     {
-        exp_values[i] = exp(input_values[i] - max_val);
-        sum_exp += exp_values[i];
+        sum_slot = create_operation_slot(ADD, wrap_in_array(sum_slot, exp_slots[i]), 2);
     }
-
 
     int *softmax_slots = malloc(num_outputs * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
-        softmax_slots[i] = create_operation_slot(DIV, wrap_in_array(exp_values[i], sum_exp), 2);
+        softmax_slots[i] = create_operation_slot(DIV, wrap_in_array(exp_slots[i], sum_slot), 2);
     }
 
-    free(input_values);
-    free(exp_values);
-
+    free(exp_slots);
     return softmax_slots;
 }
 
@@ -442,23 +448,22 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
 }
 
 void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double learning_rate)
-
 {
 
     int num_inputs = 784;
     int num_outputs = 10;
 
-    int layer_sizes[] = {num_inputs, num_outputs}; // 784 inputs, 128 hidden, 10 output neurons
-    int num_layers = 2;
+    int layer_sizes[] = {num_inputs, 16, 16, num_outputs};
+    int num_layers = 4;
 
     int target_slots[num_outputs];
-
 
     int *output_slots = create_feedforward_network(layer_sizes, num_layers);
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
 
-    for(int i=0; i< num_outputs; i++){
-        target_slots[i] = create_value_slot(0,0);
+    for (int i = 0; i < num_outputs; i++)
+    {
+        target_slots[i] = create_value_slot(0, 0);
     }
 
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
@@ -467,7 +472,7 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
 
     // export_graph_to_dot("test.dot");
 
-    for (int epoch = 0; epoch < 1; epoch++) // Reduced number of epochs
+    for (int epoch = 0; epoch < 100; epoch++) // Reduced number of epochs
     {
         double total_loss = 0.0;
 
@@ -479,7 +484,6 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
                 slots[j].visited = 0;
             }
 
-            
             for (int k = 0; k < num_inputs; k++)
             {
                 set_value_slot(k, inputs[i][k]);
@@ -499,20 +503,48 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
             }
 
             compute_graph(loss_slot);
-            
-            
-            
+
             total_loss += get_value_slot(loss_slot);
 
             slots[loss_slot].gradient = 1.0;
+
+            printf("Softmax: ");
+            for (int j = 0; j < num_outputs; j++)
+            {
+                printf("%f ", get_value_slot(softmax_slots[j]));
+            }
+            printf("\n");
+
             compute_grad(loss_slot);
 
             for (int j = 0; j < slot_count; j++)
             {
                 if (slots[j].learnable_param == 1)
                 {
-                    printf("Slot %d: Gradient = %.6f\n", j, slots[j].gradient);
                     set_value_slot(j, get_value_slot(j) - learning_rate * slots[j].gradient);
+                }
+                double beta1 = 0.9;   // Momentum decay factor
+                double beta2 = 0.999; // RMSProp decay factor
+                double epsilon = 1e-8;
+
+                for (int j = 0; j < slot_count; j++)
+                {
+                    if (slots[j].learnable_param == 1)
+                    {
+                        if (slots[j].momentum == 0 && slots[j].rms == 0)
+                        {
+                            slots[j].momentum = 0;
+                            slots[j].rms = 0;
+                        }
+
+                        slots[j].momentum = beta1 * slots[j].momentum + (1 - beta1) * slots[j].gradient;
+                        slots[j].rms = beta2 * slots[j].rms + (1 - beta2) * (slots[j].gradient * slots[j].gradient);
+
+                        double corrected_momentum = slots[j].momentum / (1 - beta1);
+                        double corrected_rms = slots[j].rms / (1 - beta2);
+
+                        set_value_slot(j, get_value_slot(j) - (learning_rate * corrected_momentum) / (sqrt(corrected_rms) + epsilon));
+                    }
                 }
             }
         }
@@ -530,7 +562,7 @@ int main()
         return 1;
     }
 
-    int num_samples = 1;
+    int num_samples = 10;
     double inputs[num_samples][IMAGE_SIZE];
     int labels[num_samples];
 
@@ -552,7 +584,7 @@ int main()
 
     fclose(file);
 
-    double learning_rate = 0.0001;
+    double learning_rate = 0.001;
 
     train(inputs, labels, num_samples, learning_rate);
 
