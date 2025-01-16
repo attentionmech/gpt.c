@@ -28,4 +28,5 @@ Current State:
 
 - ~~too much object reallocation, design needs to change~~
 - ~~Gradients are not converging properly~~
-- MNIST Test failed because of memory leaks. 
+- ~~MNIST Test failed because of memory leaks.~~
+- Slow network convergence for large MLP
