@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #define MAX_SLOTS 100
 
@@ -25,6 +27,10 @@ typedef struct
 Slot slots[MAX_SLOTS];
 int slot_count = 0;
 
+double random_init() {
+    return (rand() / (double)RAND_MAX) * 2.0 - 1.0;
+}
+
 int create_value_slot(double value, int learnable_param)
 {
     slots[slot_count].value = value;
@@ -32,6 +38,11 @@ int create_value_slot(double value, int learnable_param)
     slots[slot_count].operation = PARAMETER;
     slots[slot_count].num_dependencies = 0;
     slots[slot_count].learnable_param = learnable_param;
+
+   if (learnable_param == 1) {
+        slots[slot_count].value = random_init(); 
+    }
+
     return slot_count++;
 }
 
@@ -135,56 +146,65 @@ double calculate_loss(double predictions[], int labels[], int num_samples)
 
 void train(double inputs[][2], int labels[], int num_samples, double learning_rate)
 {
+
     int input1_slot = create_value_slot(0.0, 0);
     int input2_slot = create_value_slot(0.0, 0);
-
     
     int weight1_slot = create_value_slot(0.1, 1);
     int weight2_slot = create_value_slot(0.1, 1);
     int weight3_slot = create_value_slot(0.1, 1);
+    int weight4_slot = create_value_slot(0.1, 1);
     int bias1_slot = create_value_slot(0.0, 1);
     int bias2_slot = create_value_slot(0.0, 1);
-
     
-    int hidden_output1_slot = create_operation_slot(MULTIPLY, input1_slot, weight1_slot);
-    int hidden_output2_slot = create_operation_slot(MULTIPLY, input2_slot, weight2_slot);
-    int hidden_output1_biased_slot = create_operation_slot(ADD, hidden_output1_slot, bias1_slot);
-    int hidden_output2_biased_slot = create_operation_slot(ADD, hidden_output2_slot, bias2_slot);
+    int weight5_slot = create_value_slot(0.1, 1);
+    int weight6_slot = create_value_slot(0.1, 1);
+    int bias3_slot = create_value_slot(0.0, 1);
 
-    
-    int hidden1_sigmoid_slot = create_operation_slot(SIGMOID, hidden_output1_biased_slot, 0);
-    int hidden2_sigmoid_slot = create_operation_slot(SIGMOID, hidden_output2_biased_slot, 0);
 
-    
-    int output_slot = create_operation_slot(MULTIPLY, hidden1_sigmoid_slot, weight3_slot);
-    output_slot = create_operation_slot(ADD, output_slot, hidden2_sigmoid_slot);
+    int hidden1_mul1 = create_operation_slot(MULTIPLY, input1_slot, weight1_slot);
+    int hidden1_mul2 = create_operation_slot(MULTIPLY, input2_slot, weight2_slot);
+    int hidden1_sum = create_operation_slot(ADD, hidden1_mul1, hidden1_mul2);
+    int hidden1_biased = create_operation_slot(ADD, hidden1_sum, bias1_slot);
+    int hidden1_output = create_operation_slot(SIGMOID, hidden1_biased, 0);
 
-    
+    int hidden2_mul1 = create_operation_slot(MULTIPLY, input1_slot, weight3_slot);
+    int hidden2_mul2 = create_operation_slot(MULTIPLY, input2_slot, weight4_slot);
+    int hidden2_sum = create_operation_slot(ADD, hidden2_mul1, hidden2_mul2);
+    int hidden2_biased = create_operation_slot(ADD, hidden2_sum, bias2_slot);
+    int hidden2_output = create_operation_slot(SIGMOID, hidden2_biased, 0);
+
+
+    int output_mul1 = create_operation_slot(MULTIPLY, hidden1_output, weight5_slot);
+    int output_mul2 = create_operation_slot(MULTIPLY, hidden2_output, weight6_slot);
+    int output_sum = create_operation_slot(ADD, output_mul1, output_mul2);
+    int output_biased = create_operation_slot(ADD, output_sum, bias3_slot);
+    int final_output = create_operation_slot(SIGMOID, output_biased, 0);  // Add sigmoid to output
+
     int target_slot = create_value_slot(0.0, 0);
-    int loss_slot = create_operation_slot(MSE, output_slot, target_slot);
+    int loss_slot = create_operation_slot(MSE, final_output, target_slot);
 
-    for (int epoch = 0; epoch < 10000; epoch++)
-    { 
-        double predictions[num_samples];
+    srand(time(NULL));
 
+    for (int epoch = 0; epoch < 1000000; epoch++)
+    {
+        double total_loss = 0.0;
         
-
         for (int i = 0; i < num_samples; i++)
         {
-
-            for (int i = 0; i < slot_count; i++)
+            
+            for (int j = 0; j < slot_count; j++)
             {
-                slots[i].gradient = 0.0;
+                slots[j].gradient = 0.0;
             }
 
             
             set_value_slot(input1_slot, inputs[i][0]);
             set_value_slot(input2_slot, inputs[i][1]);
             set_value_slot(target_slot, labels[i]);
-
             
             compute_graph(loss_slot);
-            predictions[i] = get_value_slot(output_slot);
+            total_loss += get_value_slot(loss_slot);
 
             
             slots[loss_slot].gradient = 1.0;
@@ -195,26 +215,26 @@ void train(double inputs[][2], int labels[], int num_samples, double learning_ra
             {
                 if (slots[j].learnable_param == 1)
                 {
-                    printf("Slot %d gradient: %f\n", j, slots[j].gradient);
                     set_value_slot(j, get_value_slot(j) - learning_rate * slots[j].gradient);
                 }
             }
         }
 
-        double loss = calculate_loss(predictions, labels, num_samples);
-        printf("Epoch %d Loss: %f\n", epoch + 1, loss);
+        if (epoch % 100 == 0)
+        {
+            printf("Epoch %d Average Loss: %f\n", epoch + 1, total_loss / num_samples);
+        }
     }
 
     
-    printf("\nInference Results:\n");
+    printf("\nFinal Results:\n");
     for (int i = 0; i < num_samples; i++)
     {
         set_value_slot(input1_slot, inputs[i][0]);
         set_value_slot(input2_slot, inputs[i][1]);
-
-        
-        compute_graph(output_slot);
-        printf("Input: (%.1f, %.1f) => Predicted Output: %.4f\n", inputs[i][0], inputs[i][1], get_value_slot(output_slot));
+        compute_graph(final_output);
+        printf("Input: (%.1f, %.1f) => Target: %d, Predicted: %.4f\n", 
+               inputs[i][0], inputs[i][1], labels[i], get_value_slot(final_output));
     }
 }
 
@@ -225,7 +245,7 @@ int main()
         {0.0, 1.0},
         {1.0, 0.0},
         {1.0, 1.0}};
-    int labels[4] = {0, 1, 1, 0};
+    int labels[4] = {0, 0, 0, 1};
 
     double learning_rate = 0.001;
 
