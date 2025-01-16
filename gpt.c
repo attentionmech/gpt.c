@@ -27,8 +27,21 @@ typedef struct
 Slot slots[MAX_SLOTS];
 int slot_count = 0;
 
-double random_init() {
+double random_init()
+{
     return (rand() / (double)RAND_MAX) * 2.0 - 1.0;
+}
+
+int increment_slot()
+{
+
+    if (slot_count >= MAX_SLOTS)
+    {
+        fprintf(stderr, "Error: Exceeded maximum number of slots (%d)\n", MAX_SLOTS);
+        exit(EXIT_FAILURE);
+    }
+
+    return slot_count++;
 }
 
 int create_value_slot(double value, int learnable_param)
@@ -39,11 +52,12 @@ int create_value_slot(double value, int learnable_param)
     slots[slot_count].num_dependencies = 0;
     slots[slot_count].learnable_param = learnable_param;
 
-   if (learnable_param == 1) {
-        slots[slot_count].value = random_init(); 
+    if (learnable_param == 1)
+    {
+        slots[slot_count].value = random_init();
     }
 
-    return slot_count++;
+    return increment_slot();
 }
 
 int create_operation_slot(OperationType op, int dep1, int dep2)
@@ -54,7 +68,7 @@ int create_operation_slot(OperationType op, int dep1, int dep2)
     slots[slot_count].num_dependencies = 2;
     slots[slot_count].gradient = 0.0;
     slots[slot_count].learnable_param = 0;
-    return slot_count++;
+    return increment_slot();
 }
 
 void set_value_slot(int slot, double value)
@@ -144,42 +158,68 @@ double calculate_loss(double predictions[], int labels[], int num_samples)
     return loss / num_samples;
 }
 
+int create_feedforward_network(int *layer_sizes, int num_layers)
+{
+    int *prev_layer_slots = NULL;
+    int *curr_layer_slots = NULL;
+    int curr_slot = 0;
+
+    for (int layer = 0; layer < num_layers; layer++)
+    {
+        curr_layer_slots = malloc(layer_sizes[layer] * sizeof(int));
+
+        if (layer == 0)
+        {
+            for (int i = 0; i < layer_sizes[layer]; i++)
+            {
+                curr_layer_slots[i] = create_value_slot(0.0, 0);
+            }
+        }
+        else
+        {
+            for (int neuron = 0; neuron < layer_sizes[layer]; neuron++)
+            {
+                int sum = -1;
+                for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
+                {
+                    int weight = create_value_slot(0.1, 1);
+                    int mul = create_operation_slot(MULTIPLY, prev_layer_slots[prev], weight);
+
+                    if (sum == -1)
+                    {
+                        sum = mul;
+                    }
+                    else
+                    {
+                        sum = create_operation_slot(ADD, sum, mul);
+                    }
+                }
+
+                int bias = create_value_slot(0.0, 1);
+                int biased = create_operation_slot(ADD, sum, bias);
+
+                curr_layer_slots[neuron] = create_operation_slot(SIGMOID, biased, 0);
+            }
+        }
+
+        free(prev_layer_slots);
+        prev_layer_slots = curr_layer_slots;
+    }
+
+    curr_slot = curr_layer_slots[0];
+
+    free(curr_layer_slots);
+
+    return curr_slot;
+}
+
 void train(double inputs[][2], int labels[], int num_samples, double learning_rate)
 {
+    int layer_sizes[] = {2, 2, 1};
+    int num_layers = 3;
 
-    int input1_slot = create_value_slot(0.0, 0);
-    int input2_slot = create_value_slot(0.0, 0);
-    
-    int weight1_slot = create_value_slot(0.1, 1);
-    int weight2_slot = create_value_slot(0.1, 1);
-    int weight3_slot = create_value_slot(0.1, 1);
-    int weight4_slot = create_value_slot(0.1, 1);
-    int bias1_slot = create_value_slot(0.0, 1);
-    int bias2_slot = create_value_slot(0.0, 1);
-    
-    int weight5_slot = create_value_slot(0.1, 1);
-    int weight6_slot = create_value_slot(0.1, 1);
-    int bias3_slot = create_value_slot(0.0, 1);
-
-
-    int hidden1_mul1 = create_operation_slot(MULTIPLY, input1_slot, weight1_slot);
-    int hidden1_mul2 = create_operation_slot(MULTIPLY, input2_slot, weight2_slot);
-    int hidden1_sum = create_operation_slot(ADD, hidden1_mul1, hidden1_mul2);
-    int hidden1_biased = create_operation_slot(ADD, hidden1_sum, bias1_slot);
-    int hidden1_output = create_operation_slot(SIGMOID, hidden1_biased, 0);
-
-    int hidden2_mul1 = create_operation_slot(MULTIPLY, input1_slot, weight3_slot);
-    int hidden2_mul2 = create_operation_slot(MULTIPLY, input2_slot, weight4_slot);
-    int hidden2_sum = create_operation_slot(ADD, hidden2_mul1, hidden2_mul2);
-    int hidden2_biased = create_operation_slot(ADD, hidden2_sum, bias2_slot);
-    int hidden2_output = create_operation_slot(SIGMOID, hidden2_biased, 0);
-
-
-    int output_mul1 = create_operation_slot(MULTIPLY, hidden1_output, weight5_slot);
-    int output_mul2 = create_operation_slot(MULTIPLY, hidden2_output, weight6_slot);
-    int output_sum = create_operation_slot(ADD, output_mul1, output_mul2);
-    int output_biased = create_operation_slot(ADD, output_sum, bias3_slot);
-    int final_output = create_operation_slot(SIGMOID, output_biased, 0);  // Add sigmoid to output
+    int final_output = create_feedforward_network(layer_sizes, num_layers);
+    // the input neurons are first created, hence 0,1 etc can be used from there
 
     int target_slot = create_value_slot(0.0, 0);
     int loss_slot = create_operation_slot(MSE, final_output, target_slot);
@@ -189,28 +229,25 @@ void train(double inputs[][2], int labels[], int num_samples, double learning_ra
     for (int epoch = 0; epoch < 1000000; epoch++)
     {
         double total_loss = 0.0;
-        
+
         for (int i = 0; i < num_samples; i++)
         {
-            
+
             for (int j = 0; j < slot_count; j++)
             {
                 slots[j].gradient = 0.0;
             }
 
-            
-            set_value_slot(input1_slot, inputs[i][0]);
-            set_value_slot(input2_slot, inputs[i][1]);
+            set_value_slot(0, inputs[i][0]);
+            set_value_slot(1, inputs[i][1]);
             set_value_slot(target_slot, labels[i]);
-            
+
             compute_graph(loss_slot);
             total_loss += get_value_slot(loss_slot);
 
-            
             slots[loss_slot].gradient = 1.0;
             compute_grad(loss_slot);
 
-            
             for (int j = 0; j < slot_count; j++)
             {
                 if (slots[j].learnable_param == 1)
@@ -226,14 +263,13 @@ void train(double inputs[][2], int labels[], int num_samples, double learning_ra
         }
     }
 
-    
     printf("\nFinal Results:\n");
     for (int i = 0; i < num_samples; i++)
     {
-        set_value_slot(input1_slot, inputs[i][0]);
-        set_value_slot(input2_slot, inputs[i][1]);
+        set_value_slot(0, inputs[i][0]);
+        set_value_slot(1, inputs[i][1]);
         compute_graph(final_output);
-        printf("Input: (%.1f, %.1f) => Target: %d, Predicted: %.4f\n", 
+        printf("Input: (%.1f, %.1f) => Target: %d, Predicted: %.4f\n",
                inputs[i][0], inputs[i][1], labels[i], get_value_slot(final_output));
     }
 }
@@ -245,7 +281,7 @@ int main()
         {0.0, 1.0},
         {1.0, 0.0},
         {1.0, 1.0}};
-    int labels[4] = {0, 0, 0, 1};
+    int labels[4] = {0, 1, 1, 0};
 
     double learning_rate = 0.001;
 
