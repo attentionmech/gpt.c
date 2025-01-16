@@ -3,16 +3,19 @@
 #include <math.h>
 #include <time.h>
 
-#define MAX_SLOTS 100
+#define MAX_SLOTS 1000000
+#define IMAGE_SIZE 784 // 28x28 pixels
 
 typedef enum
 {
     ADD,
     MULTIPLY,
     SIGMOID,
+    RELU,
     MSE,
-    PARAMETER
+    PARAMETER,
 } OperationType;
+
 
 typedef struct
 {
@@ -34,13 +37,11 @@ double random_init()
 
 int increment_slot()
 {
-
     if (slot_count >= MAX_SLOTS)
     {
         fprintf(stderr, "Error: Exceeded maximum number of slots (%d)\n", MAX_SLOTS);
         exit(EXIT_FAILURE);
     }
-
     return slot_count++;
 }
 
@@ -100,6 +101,9 @@ double compute_graph(int slot)
         case SIGMOID:
             s->value = 1.0 / (1.0 + exp(-dep1_value));
             break;
+        case RELU:
+            s->value = fmax(0.0, dep1_value);
+            break;
         case MSE:
             s->value = (dep1_value - dep2_value) * (dep1_value - dep2_value);
             break;
@@ -134,6 +138,13 @@ void compute_grad(int slot)
             slots[s->dependencies[0]].gradient += s->gradient * sigmoid_derivative;
         }
         break;
+        case RELU:
+            if (slots[s->dependencies[0]].value > 0)
+            {
+                slots[s->dependencies[0]].gradient += s->gradient;
+            }
+            break;
+
         case MSE:
             slots[s->dependencies[0]].gradient += 2.0 * s->gradient * (dep1_value - dep2_value);
             break;
@@ -148,15 +159,6 @@ void compute_grad(int slot)
     }
 }
 
-double calculate_loss(double predictions[], int labels[], int num_samples)
-{
-    double loss = 0.0;
-    for (int i = 0; i < num_samples; i++)
-    {
-        loss += predictions[i];
-    }
-    return loss / num_samples;
-}
 
 int create_feedforward_network(int *layer_sizes, int num_layers)
 {
@@ -170,6 +172,7 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
 
         if (layer == 0)
         {
+            // Input layer (no batch norm required here)
             for (int i = 0; i < layer_sizes[layer]; i++)
             {
                 curr_layer_slots[i] = create_value_slot(0.0, 0);
@@ -198,7 +201,8 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
                 int bias = create_value_slot(0.0, 1);
                 int biased = create_operation_slot(ADD, sum, bias);
 
-                curr_layer_slots[neuron] = create_operation_slot(SIGMOID, biased, 0);
+
+                curr_layer_slots[neuron] = create_operation_slot(RELU, biased, 0);
             }
         }
 
@@ -213,33 +217,35 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
     return curr_slot;
 }
 
-void train(double inputs[][2], int labels[], int num_samples, double learning_rate)
+
+void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double learning_rate)
 {
-    int layer_sizes[] = {2, 2, 1};
+    int layer_sizes[] = {IMAGE_SIZE, 128, 10}; // 784 inputs, 128 hidden, 10 output neurons
     int num_layers = 3;
 
     int final_output = create_feedforward_network(layer_sizes, num_layers);
-    // the input neurons are first created, hence 0,1 etc can be used from there
 
     int target_slot = create_value_slot(0.0, 0);
     int loss_slot = create_operation_slot(MSE, final_output, target_slot);
 
     srand(time(NULL));
 
-    for (int epoch = 0; epoch < 1000000; epoch++)
+    for (int epoch = 0; epoch < 1000000; epoch++) // Reduced number of epochs
     {
         double total_loss = 0.0;
 
         for (int i = 0; i < num_samples; i++)
         {
-
             for (int j = 0; j < slot_count; j++)
             {
                 slots[j].gradient = 0.0;
             }
 
-            set_value_slot(0, inputs[i][0]);
-            set_value_slot(1, inputs[i][1]);
+            // Set input and target values
+            for (int k = 0; k < IMAGE_SIZE; k++)
+            {
+                set_value_slot(k, inputs[i][k]);
+            }
             set_value_slot(target_slot, labels[i]);
 
             compute_graph(loss_slot);
@@ -257,35 +263,38 @@ void train(double inputs[][2], int labels[], int num_samples, double learning_ra
             }
         }
 
-        if (epoch % 100 == 0)
-        {
-            printf("Epoch %d Average Loss: %f\n", epoch + 1, total_loss / num_samples);
-        }
-    }
-
-    printf("\nFinal Results:\n");
-    for (int i = 0; i < num_samples; i++)
-    {
-        set_value_slot(0, inputs[i][0]);
-        set_value_slot(1, inputs[i][1]);
-        compute_graph(final_output);
-        printf("Input: (%.1f, %.1f) => Target: %d, Predicted: %.4f\n",
-               inputs[i][0], inputs[i][1], labels[i], get_value_slot(final_output));
+        printf("Epoch %d, Loss: %f\n", epoch, total_loss / num_samples);
     }
 }
 
+
 int main()
 {
-    double inputs[4][2] = {
-        {0.0, 0.0},
-        {0.0, 1.0},
-        {1.0, 0.0},
-        {1.0, 1.0}};
-    int labels[4] = {0, 1, 1, 0};
+    FILE *file = fopen("dataset/mnist.csv", "r");
+    if (file == NULL)
+    {
+        fprintf(stderr, "Error opening file\n");
+        return 1;
+    }
+
+    int num_samples = 10;
+    double inputs[num_samples][IMAGE_SIZE];
+    int labels[num_samples];
+
+    for (int i = 0; i < num_samples; i++)
+    {
+        for (int j = 0; j < IMAGE_SIZE; j++)
+        {
+            fscanf(file, "%lf,", &inputs[i][j]);
+        }
+        fscanf(file, "%d\n", &labels[i]);
+    }
+
+    fclose(file);
 
     double learning_rate = 0.001;
 
-    train(inputs, labels, 4, learning_rate);
+    train(inputs, labels, num_samples, learning_rate);
 
     return 0;
 }
