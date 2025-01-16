@@ -3,3 +3,6 @@ a.out
 main
 .vscode
 *.dot
+gpt.dSYM/
+a.out.*
+gpt

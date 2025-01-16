@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <string.h>
+
 
 #define MAX_SLOTS 1000000
-#define IMAGE_SIZE 784 // 28x28 pixels
+#define IMAGE_SIZE 784
 
 typedef enum
 {
@@ -15,7 +17,6 @@ typedef enum
     MSE,
     PARAMETER,
 } OperationType;
-
 
 typedef struct
 {
@@ -159,7 +160,6 @@ void compute_grad(int slot)
     }
 }
 
-
 int create_feedforward_network(int *layer_sizes, int num_layers)
 {
     int *prev_layer_slots = NULL;
@@ -201,7 +201,6 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
                 int bias = create_value_slot(0.0, 1);
                 int biased = create_operation_slot(ADD, sum, bias);
 
-
                 curr_layer_slots[neuron] = create_operation_slot(RELU, biased, 0);
             }
         }
@@ -217,10 +216,9 @@ int create_feedforward_network(int *layer_sizes, int num_layers)
     return curr_slot;
 }
 
-
 void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double learning_rate)
 {
-    int layer_sizes[] = {IMAGE_SIZE, 128, 10}; // 784 inputs, 128 hidden, 10 output neurons
+    int layer_sizes[] = {IMAGE_SIZE,  10, 1}; // 784 inputs, 128 hidden, 10 output neurons
     int num_layers = 3;
 
     int final_output = create_feedforward_network(layer_sizes, num_layers);
@@ -229,6 +227,7 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
     int loss_slot = create_operation_slot(MSE, final_output, target_slot);
 
     srand(time(NULL));
+
 
     for (int epoch = 0; epoch < 1000000; epoch++) // Reduced number of epochs
     {
@@ -246,10 +245,14 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
             {
                 set_value_slot(k, inputs[i][k]);
             }
+
+
             set_value_slot(target_slot, labels[i]);
 
             compute_graph(loss_slot);
             total_loss += get_value_slot(loss_slot);
+
+            // printf("%lf %lf\n", get_value_slot(target_slot), get_value_slot(final_output));
 
             slots[loss_slot].gradient = 1.0;
             compute_grad(loss_slot);
@@ -267,27 +270,33 @@ void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double le
     }
 }
 
-
 int main()
 {
-    FILE *file = fopen("dataset/mnist.csv", "r");
+    FILE *file = fopen("dataset/mnist.txt", "r");
     if (file == NULL)
     {
         fprintf(stderr, "Error opening file\n");
         return 1;
     }
 
-    int num_samples = 10;
+    int num_samples = 100;
     double inputs[num_samples][IMAGE_SIZE];
     int labels[num_samples];
 
-    for (int i = 0; i < num_samples; i++)
-    {
-        for (int j = 0; j < IMAGE_SIZE; j++)
-        {
-            fscanf(file, "%lf,", &inputs[i][j]);
+    
+    int i=0;
+
+
+     while (fscanf(file, "%d", &labels[i]) != EOF && i < num_samples) {
+        
+        for (int j = 0; j < IMAGE_SIZE; j++) {
+
+            if (fscanf(file, "%lf", &inputs[i][j]) != 1) {
+                break;
+            }
         }
-        fscanf(file, "%d\n", &labels[i]);
+        i++;
+        
     }
 
     fclose(file);
