@@ -701,15 +701,53 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
 int main()
 {
-    FILE *file = fopen("dataset/mnist.txt", "r");
+
+    FILE *file = fopen("dataset/tinystories.txt", "r");
     if (file == NULL)
     {
         fprintf(stderr, "Error opening file\n");
         return 1;
     }
 
-    int input_size = 784;
-    int num_samples = 50;
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char *data = (char *)malloc(file_size + 1);
+    int data_length = fread(data, sizeof(char), file_size, file);
+    data[data_length] = '\0';
+    fclose(file);
+
+    int MAX_CHARACTERS = 64;
+    int SEQUENCE_LENGTH = 4;
+
+    int char_to_index[MAX_CHARACTERS];
+    int index_to_char[MAX_CHARACTERS];
+    for (int i = 0; i < MAX_CHARACTERS; i++)
+    {
+        char_to_index[i] = -1;
+    }
+
+    int vocab_size = 0;
+    for (int i = 0; i < data_length; i++)
+    {
+        unsigned char c = data[i];
+        if (char_to_index[c] == -1)
+        {
+            char_to_index[c] = vocab_size;
+            index_to_char[vocab_size] = c;
+            vocab_size++;
+        }
+    }
+
+    int input_size = SEQUENCE_LENGTH;
+    int num_samples = data_length - SEQUENCE_LENGTH;
+
+    if (num_samples > 10000)
+    {
+        num_samples = 10000;
+    }
+
     int labels[num_samples];
 
     double **inputs = (double **)malloc(num_samples * sizeof(double *));
@@ -718,29 +756,24 @@ int main()
         inputs[i] = (double *)malloc(input_size * sizeof(double)); // Allocate space for each sample
     }
 
-    int i = 0;
-
-    while (fscanf(file, "%d", &labels[i]) != EOF && i < num_samples)
+    for (int i = 0; i < num_samples; i++)
     {
-
         for (int j = 0; j < input_size; j++)
         {
-
-            if (fscanf(file, "%lf", &inputs[i][j]) != 1)
+            unsigned char c = data[i + j];
+            for (int k = 0; k < MAX_CHARACTERS; k++)
             {
-                break;
+                inputs[i][j * MAX_CHARACTERS + k] = (char_to_index[c] == k) ? 1.0 : 0.0;
             }
-            inputs[i][j] /= 255.0;
         }
-        i++;
+
+        unsigned char next_char = data[i + SEQUENCE_LENGTH];
+        labels[i] = char_to_index[next_char];
     }
 
-    fclose(file);
-
     double learning_rate = 0.01;
-
-    int layer_sizes[] = {784, 16, 16, 10}; // first is input, last is output
-    int num_layers = 4;
+    int layer_sizes[] = {input_size * MAX_CHARACTERS, 16, vocab_size}; // Adjusted for next character prediction
+    int num_layers = 3;
 
     train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers);
 
