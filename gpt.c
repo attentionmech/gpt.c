@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define MAX_SLOTS 1000000
-#define IMAGE_SIZE 784
+#define INPUT_SIZE 784
 
 typedef enum
 {
@@ -315,11 +315,10 @@ void compute_grad(int slot)
         default:
             break;
         }
-
-        for (int i = 0; i < s->num_dependencies; i++)
-        {
-            compute_grad(s->dependencies[i]);
-        }
+    }
+    for (int i = 0; i < s->num_dependencies; i++)
+    {
+        compute_grad(s->dependencies[i]);
     }
 }
 
@@ -447,14 +446,11 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
     return neg_cross_entropy;
 }
 
-void train(double inputs[][IMAGE_SIZE], int labels[], int num_samples, double learning_rate)
+void train(double inputs[][INPUT_SIZE], int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers)
 {
 
-    int num_inputs = 784;
-    int num_outputs = 10;
-
-    int layer_sizes[] = {num_inputs, 16, 16, num_outputs};
-    int num_layers = 4;
+    int num_inputs = layer_sizes[0];
+    int num_outputs = layer_sizes[num_layers - 1];
 
     int target_slots[num_outputs];
 
@@ -563,7 +559,7 @@ int main()
     }
 
     int num_samples = 10;
-    double inputs[num_samples][IMAGE_SIZE];
+    double inputs[num_samples][INPUT_SIZE];
     int labels[num_samples];
 
     int i = 0;
@@ -571,7 +567,7 @@ int main()
     while (fscanf(file, "%d", &labels[i]) != EOF && i < num_samples)
     {
 
-        for (int j = 0; j < IMAGE_SIZE; j++)
+        for (int j = 0; j < INPUT_SIZE; j++)
         {
 
             if (fscanf(file, "%lf", &inputs[i][j]) != 1)
@@ -586,7 +582,10 @@ int main()
 
     double learning_rate = 0.001;
 
-    train(inputs, labels, num_samples, learning_rate);
+    int layer_sizes[] = {784, 16, 16, 10}; // first is input, last is output
+    int num_layers = 4;
+
+    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers);
 
     return 0;
 }
