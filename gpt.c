@@ -5,7 +5,6 @@
 #include <string.h>
 
 #define MAX_SLOTS 1000000
-#define INPUT_SIZE 784
 
 typedef enum
 {
@@ -104,7 +103,10 @@ void export_graph_to_dot(const char *filename)
 
 double random_init()
 {
-    return (rand() / (double)RAND_MAX) * 2.0 - 1.0;
+    double u1 = (double)rand() / RAND_MAX;
+    double u2 = (double)rand() / RAND_MAX;
+    double z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+    return z0;
 }
 
 int increment_slot()
@@ -144,12 +146,12 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies)
     return increment_slot();
 }
 
-void set_value_slot(int slot, double value)
+void set_slot_value(int slot, double value)
 {
     slots[slot].value = value;
 }
 
-double get_value_slot(int slot)
+double get_slot_value(int slot)
 {
     return slots[slot].value;
 }
@@ -250,7 +252,7 @@ void compute_grad(int slot)
         double dep_value[s->num_dependencies];
         for (int j = 0; j < s->num_dependencies; j++)
         {
-            dep_value[j] = get_value_slot(s->dependencies[j]);
+            dep_value[j] = get_slot_value(s->dependencies[j]);
         }
 
         switch (s->operation)
@@ -446,7 +448,7 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
     return neg_cross_entropy;
 }
 
-void train(double inputs[][INPUT_SIZE], int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers)
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers)
 {
 
     int num_inputs = layer_sizes[0];
@@ -482,7 +484,7 @@ void train(double inputs[][INPUT_SIZE], int labels[], int num_samples, double le
 
             for (int k = 0; k < num_inputs; k++)
             {
-                set_value_slot(k, inputs[i][k]);
+                set_slot_value(k, inputs[i][k]);
             }
 
             // one hot
@@ -490,24 +492,24 @@ void train(double inputs[][INPUT_SIZE], int labels[], int num_samples, double le
             {
                 if (l == labels[i])
                 {
-                    set_value_slot(target_slots[l - 1], 1);
+                    set_slot_value(target_slots[l - 1], 1);
                 }
                 else
                 {
-                    set_value_slot(target_slots[l - 1], 0);
+                    set_slot_value(target_slots[l - 1], 0);
                 }
             }
 
             compute_graph(loss_slot);
 
-            total_loss += get_value_slot(loss_slot);
+            total_loss += get_slot_value(loss_slot);
 
             slots[loss_slot].gradient = 1.0;
 
             printf("Softmax: ");
             for (int j = 0; j < num_outputs; j++)
             {
-                printf("%f ", get_value_slot(softmax_slots[j]));
+                printf("%f ", get_slot_value(softmax_slots[j]));
             }
             printf("\n");
 
@@ -517,7 +519,7 @@ void train(double inputs[][INPUT_SIZE], int labels[], int num_samples, double le
             {
                 if (slots[j].learnable_param == 1)
                 {
-                    set_value_slot(j, get_value_slot(j) - learning_rate * slots[j].gradient);
+                    set_slot_value(j, get_slot_value(j) - learning_rate * slots[j].gradient);
                 }
                 double beta1 = 0.9;   // Momentum decay factor
                 double beta2 = 0.999; // RMSProp decay factor
@@ -539,7 +541,7 @@ void train(double inputs[][INPUT_SIZE], int labels[], int num_samples, double le
                         double corrected_momentum = slots[j].momentum / (1 - beta1);
                         double corrected_rms = slots[j].rms / (1 - beta2);
 
-                        set_value_slot(j, get_value_slot(j) - (learning_rate * corrected_momentum) / (sqrt(corrected_rms) + epsilon));
+                        set_slot_value(j, get_slot_value(j) - (learning_rate * corrected_momentum) / (sqrt(corrected_rms) + epsilon));
                     }
                 }
             }
@@ -558,32 +560,39 @@ int main()
         return 1;
     }
 
-    int num_samples = 10;
-    double inputs[num_samples][INPUT_SIZE];
+    int input_size = 784;
+    int num_samples = 100;
     int labels[num_samples];
+
+    double **inputs = (double **)malloc(num_samples * sizeof(double *));
+    for (int i = 0; i < num_samples; i++)
+    {
+        inputs[i] = (double *)malloc(input_size * sizeof(double)); // Allocate space for each sample
+    }
 
     int i = 0;
 
     while (fscanf(file, "%d", &labels[i]) != EOF && i < num_samples)
     {
 
-        for (int j = 0; j < INPUT_SIZE; j++)
+        for (int j = 0; j < input_size; j++)
         {
 
             if (fscanf(file, "%lf", &inputs[i][j]) != 1)
             {
                 break;
             }
+            inputs[i][j] /= 255.0;
         }
         i++;
     }
 
     fclose(file);
 
-    double learning_rate = 0.001;
+    double learning_rate = 0.01;
 
-    int layer_sizes[] = {784, 16, 16, 10}; // first is input, last is output
-    int num_layers = 4;
+    int layer_sizes[] = {784, 10, 10}; // first is input, last is output
+    int num_layers = 3;
 
     train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers);
 
