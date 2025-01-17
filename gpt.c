@@ -314,128 +314,6 @@ double *compute_graph(int slot)
     return s->value;
 }
 
-// void compute_grad_iter(int slot)
-// {
-//     int stack_top = -1;
-
-//     stack[++stack_top] = slot;
-
-//     while (stack_top >= 0)
-//     {
-//         int current_slot = stack[stack_top--];
-//         Slot *s = &slots[current_slot];
-
-//         if (s->num_dependencies > 0)
-//         {
-
-//             for (int j = 0; j < s->num_dependencies; j++)
-//             {
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     dependency_buffer[b][j] = get_slot_value(s->dependencies[j], b);
-//                 }
-//             }
-
-//             switch (s->operation)
-//             {
-//             case ADD:
-//                 for (int i = 0; i < s->num_dependencies; i++)
-//                 {
-//                     for (int b = 0; b < BATCH_SIZE; b++)
-//                     {
-//                         slots[s->dependencies[i]].gradient[b] += s->gradient[b];
-//                     }
-//                 }
-//                 break;
-
-//             case MULTIPLY:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     double product = 1.0;
-//                     for (int j = 0; j < s->num_dependencies; j++)
-//                     {
-//                         product *= dependency_buffer[b][j];
-//                     }
-//                     for (int i = 0; i < s->num_dependencies; i++)
-//                     {
-//                         slots[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dependency_buffer[b][i]);
-//                     }
-//                 }
-//                 break;
-
-//             case SUB:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b];
-//                     slots[s->dependencies[1]].gradient[b] -= s->gradient[b];
-//                 }
-//                 break;
-
-//             case POW2:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dependency_buffer[b][0];
-//                 }
-//                 break;
-
-//             case SIGMOID:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b] * (1.0 - s->value[b]);
-//                 }
-//                 break;
-
-//             case RELU:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     if (dependency_buffer[b][0] > 0)
-//                     {
-//                         slots[s->dependencies[0]].gradient[b] += s->gradient[b];
-//                     }
-//                 }
-//                 break;
-
-//             case EXP:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b];
-//                 }
-//                 break;
-
-//             case NEG:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b] * -1.0;
-//                 }
-//                 break;
-
-//             case DIV:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b] / dependency_buffer[b][1];
-//                     slots[s->dependencies[1]].gradient[b] -= s->gradient[b] * dependency_buffer[b][0] / (dependency_buffer[b][1] * dependency_buffer[b][1]);
-//                 }
-//                 break;
-
-//             case LOG:
-//                 for (int b = 0; b < BATCH_SIZE; b++)
-//                 {
-//                     slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dependency_buffer[b][0]);
-//                 }
-//                 break;
-
-//             default:
-//                 break;
-//             }
-
-//             for (int i = 0; i < s->num_dependencies; i++)
-//             {
-//                 stack[++stack_top] = s->dependencies[i];
-//             }
-//         }
-//     }
-// }
-
 void compute_grad(int slot)
 {
 
@@ -682,7 +560,7 @@ int *create_softmax_layer(int *input_slots, int num_outputs)
         softmax_slots[i] = create_operation_slot(DIV, wrap_in_array(exp_slots[i], sum_slot), 2);
     }
 
-    free(exp_slots);
+    // free(exp_slots);
     return softmax_slots;
 }
 
