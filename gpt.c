@@ -35,6 +35,7 @@ typedef struct
 } Slot;
 
 Slot slots[MAX_SLOTS];
+int stack[MAX_SLOTS]; //this is for iterative version of compute_grad, which is just here to compare
 int slot_count = 0;
 
 const char *get_operation_name(OperationType op)
@@ -67,6 +68,9 @@ const char *get_operation_name(OperationType op)
         return "UNKNOWN";
     }
 }
+
+
+double *dependency_buffer[BATCH_SIZE];
 
 void export_graph_to_dot(const char *filename)
 {
@@ -287,7 +291,130 @@ double *compute_graph(int slot)
     return s->value;
 }
 
-double *dep_value[BATCH_SIZE];
+
+void compute_grad_iter(int slot)
+{    
+    int stack_top = -1;
+
+    stack[++stack_top] = slot;
+
+    while (stack_top >= 0)
+    {
+        int current_slot = stack[stack_top--];
+        Slot *s = &slots[current_slot];
+
+        if (s->num_dependencies > 0)
+        {
+            
+            for (int j = 0; j < s->num_dependencies; j++)
+            {
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    dependency_buffer[b][j] = get_slot_value(s->dependencies[j], b);
+                }
+            }
+
+            switch (s->operation)
+            {
+            case ADD:
+                for (int i = 0; i < s->num_dependencies; i++)
+                {
+                    for (int b = 0; b < BATCH_SIZE; b++)
+                    {
+                        slots[s->dependencies[i]].gradient[b] += s->gradient[b];
+                    }
+                }
+                break;
+
+            case MULTIPLY:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    double product = 1.0;
+                    for (int j = 0; j < s->num_dependencies; j++)
+                    {
+                        product *= dependency_buffer[b][j];
+                    }
+                    for (int i = 0; i < s->num_dependencies; i++)
+                    {
+                        slots[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dependency_buffer[b][i]);
+                    }
+                }
+                break;
+
+            case SUB:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                    slots[s->dependencies[1]].gradient[b] -= s->gradient[b];
+                }
+                break;
+
+            case POW2:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dependency_buffer[b][0];
+                }
+                break;
+
+            case SIGMOID:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b] * (1.0 - s->value[b]);
+                }
+                break;
+
+            case RELU:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    if (dependency_buffer[b][0] > 0)
+                    {
+                        slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                    }
+                }
+                break;
+
+            case EXP:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b];
+                }
+                break;
+
+            case NEG:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b] * -1.0;
+                }
+                break;
+
+            case DIV:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b] / dependency_buffer[b][1];
+                    slots[s->dependencies[1]].gradient[b] -= s->gradient[b] * dependency_buffer[b][0] / (dependency_buffer[b][1] * dependency_buffer[b][1]);
+                }
+                break;
+
+            case LOG:
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dependency_buffer[b][0]);
+                }
+                break;
+
+            default:
+                break;
+            }
+
+            for (int i = 0; i < s->num_dependencies; i++)
+            {
+                stack[++stack_top] = s->dependencies[i];
+            }
+        }
+    }
+}
+
+
 
 void compute_grad(int slot)
 {
@@ -302,7 +429,7 @@ void compute_grad(int slot)
         {
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                dep_value[b][j] = get_slot_value(s->dependencies[j], b);
+                dependency_buffer[b][j] = get_slot_value(s->dependencies[j], b);
             }
         }
 
@@ -324,11 +451,11 @@ void compute_grad(int slot)
                 double product = 1.0;
                 for (int j = 0; j < s->num_dependencies; j++)
                 {
-                    product *= dep_value[b][j];
+                    product *= dependency_buffer[b][j];
                 }
                 for (int i = 0; i < s->num_dependencies; i++)
                 {
-                    slots[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dep_value[b][i]);
+                    slots[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dependency_buffer[b][i]);
                 }
             }
             break;
@@ -344,7 +471,7 @@ void compute_grad(int slot)
         case POW2:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dep_value[b][0];
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dependency_buffer[b][0];
             }
             break;
 
@@ -358,7 +485,7 @@ void compute_grad(int slot)
         case RELU:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                if (dep_value[b][0] > 0)
+                if (dependency_buffer[b][0] > 0)
                 {
                     slots[s->dependencies[0]].gradient[b] += s->gradient[b];
                 }
@@ -384,8 +511,8 @@ void compute_grad(int slot)
             for (int b = 0; b < BATCH_SIZE; b++)
             {
 
-                slots[s->dependencies[0]].gradient[b] += s->gradient[b] / dep_value[b][1];
-                slots[s->dependencies[1]].gradient[b] -= s->gradient[b] * dep_value[b][0] / (dep_value[b][1] * dep_value[b][1]);
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] / dependency_buffer[b][1];
+                slots[s->dependencies[1]].gradient[b] -= s->gradient[b] * dependency_buffer[b][0] / (dependency_buffer[b][1] * dependency_buffer[b][1]);
             }
             break;
 
@@ -393,7 +520,7 @@ void compute_grad(int slot)
             for (int b = 0; b < BATCH_SIZE; b++)
             {
 
-                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dep_value[b][0]);
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dependency_buffer[b][0]);
             }
             break;
 
@@ -561,7 +688,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     // this is to setup batch operations ; will think of something better
     for (int b = 0; b < BATCH_SIZE; b++)
     {
-        dep_value[b] = (double *)malloc(MAX_DEPENDENCY * sizeof(double));
+        dependency_buffer[b] = (double *)malloc(MAX_DEPENDENCY * sizeof(double));
     }
 
     int EPOCHS = 10;
@@ -627,7 +754,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             printf("\n");
 
             clock_t start_time = clock();
-            compute_grad(loss_slot);
+            compute_grad_iter(loss_slot);
             clock_t end_time = clock();
             double time_taken = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
             printf("Time taken to propogate gradients: %f seconds\n\n", time_taken);
@@ -650,7 +777,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             }
         }
 
-        printf("Epoch %d, Avg. Loss: %f\n", epoch, total_loss / num_samples);
+        printf("Epoch %d, Avg. Loss: %f\n\n", epoch+1, total_loss / num_samples);
     }
 }
 
@@ -664,7 +791,7 @@ int main()
     }
 
     int input_size = 784;
-    int num_samples = 10000;
+    int num_samples = 50;
     int labels[num_samples];
 
     double **inputs = (double **)malloc(num_samples * sizeof(double *));
@@ -694,8 +821,8 @@ int main()
 
     double learning_rate = 0.01;
 
-    int layer_sizes[] = {784, 64, 10}; // first is input, last is output
-    int num_layers = 3;
+    int layer_sizes[] = {784, 16,16, 10}; // first is input, last is output
+    int num_layers = 4;
 
     train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers);
 
