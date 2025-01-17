@@ -5,6 +5,7 @@
 #include <string.h>
 
 #define MAX_SLOTS 1000000
+#define BATCH_SIZE 1
 
 typedef enum
 {
@@ -23,15 +24,13 @@ typedef enum
 
 typedef struct
 {
-    double value;
-    double gradient;
+    double *value;
+    double *gradient;
     OperationType operation;
     int *dependencies;
     int num_dependencies;
     int learnable_param;
     int visited;
-    double momentum;
-    double rms;
 } Slot;
 
 Slot slots[MAX_SLOTS];
@@ -85,7 +84,7 @@ void export_graph_to_dot(const char *filename)
         Slot *s = &slots[i];
         // Node definition with value, gradient, and operation type
         fprintf(file, "    slot_%d [label=\"%d\\nVal: %.2f\\nGrad: %.2f\\nOp: %s\"];\n",
-                i, i, s->value, s->gradient, get_operation_name(s->operation));
+                i, i, s->value[0], s->gradient[0], get_operation_name(s->operation));
 
         // Edge definitions based on dependencies
         for (int j = 0; j < s->num_dependencies; j++)
@@ -119,18 +118,19 @@ int increment_slot()
     return slot_count++;
 }
 
-int create_value_slot(double value, int learnable_param)
+int create_value_slot(int learnable_param)
 {
-    slots[slot_count].value = value;
-    slots[slot_count].gradient = 0.0;
+    slots[slot_count].value = (double *)malloc(BATCH_SIZE * sizeof(double));
+    slots[slot_count].gradient =
+        (double *)malloc(BATCH_SIZE * sizeof(double));
     slots[slot_count].operation = PARAMETER;
     slots[slot_count].num_dependencies = 0;
     slots[slot_count].learnable_param = learnable_param;
 
-    if (learnable_param == 1)
-    {
-        slots[slot_count].value = random_init();
-    }
+    // if (learnable_param == 1)
+    // {
+    //     slots[slot_count].value = random_init();
+    // }
 
     return increment_slot();
 }
@@ -141,24 +141,29 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies)
     slots[slot_count].dependencies = dep;
     slots[slot_count].num_dependencies = num_dependencies;
 
-    slots[slot_count].gradient = 0.0;
+    slots[slot_count].gradient = (double *)malloc(BATCH_SIZE * sizeof(double));
     slots[slot_count].learnable_param = 0;
     return increment_slot();
 }
 
-void set_slot_value(int slot, double value)
+void set_slot_value(int slot, int b_index, double v)
 {
-    slots[slot].value = value;
+    slots[slot].value[b_index] = v;
 }
 
-double get_slot_value(int slot)
+double get_slot_value(int slot, int b_index)
 {
-    return slots[slot].value;
+    if (b_index >= BATCH_SIZE)
+    {
+        fprintf(stderr, "Error: Index out of bounds\n");
+        exit(EXIT_FAILURE);
+    }
+    return slots[slot].value[b_index];
 }
 
 double _sum(double *list, int length)
 {
-    double total = 0.0;
+    double total = 0;
     for (int i = 0; i < length; i++)
     {
         total += list[i];
@@ -168,15 +173,18 @@ double _sum(double *list, int length)
 
 double _mul(double *list, int length)
 {
-    double total = 1.0;
+    double product;
+
+    product = 1.0;
     for (int i = 0; i < length; i++)
     {
-        total *= list[i];
+        product *= list[i];
     }
-    return total;
+
+    return product;
 }
 
-double compute_graph(int slot)
+double *compute_graph(int slot)
 {
 
     // printf("Computing value for slot %d\n", slot);
@@ -190,7 +198,7 @@ double compute_graph(int slot)
 
     if (s->num_dependencies > 0)
     {
-        double dep_value[s->num_dependencies];
+        double *dep_value[s->num_dependencies];
         for (int j = 0; j < s->num_dependencies; j++)
         {
             dep_value[j] = compute_graph(s->dependencies[j]);
@@ -199,38 +207,72 @@ double compute_graph(int slot)
         switch (s->operation)
         {
         case ADD:
-            s->value = _sum(dep_value, s->num_dependencies);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = _sum(dep_value[b], s->num_dependencies);
+            }
             break;
         case MULTIPLY:
-            s->value = _mul(dep_value, s->num_dependencies);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = _mul(dep_value[b], s->num_dependencies);
+            }
             break;
 
         case EXP:
-            s->value = exp(dep_value[0]);
+
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = exp(dep_value[b][0]);
+            }
             break;
         case DIV:
-            s->value = dep_value[0] / dep_value[1];
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = dep_value[b][0] / dep_value[b][1];
+            }
+
             break;
 
         case NEG:
-            s->value = -dep_value[0];
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = -dep_value[b][0];
+            }
             break;
 
         case LOG:
-            s->value = log(dep_value[0]);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = log(dep_value[b][0]);
+            }
             break;
 
         case SUB:
-            s->value = dep_value[0] - dep_value[1];
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = dep_value[b][0] - dep_value[b][0];
+            }
             break;
         case POW2:
-            s->value = dep_value[0] * dep_value[0];
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                s->value[b] = dep_value[b][0] * dep_value[b][0];
+            }
             break;
         case SIGMOID:
-            s->value = 1.0 / (1.0 + exp(-dep_value[0]));
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+
+                s->value[b] = 1.0 / (1.0 + exp(-dep_value[b][0]));
+            }
             break;
         case RELU:
-            s->value = fmax(0.0, dep_value[0]);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+
+                s->value[b] = fmax(0.0, dep_value[b][0]);
+            }
             break;
         default:
             break;
@@ -249,10 +291,13 @@ void compute_grad(int slot)
 
     if (s->num_dependencies > 0)
     {
-        double dep_value[s->num_dependencies];
+        double *dep_value[s->num_dependencies];
         for (int j = 0; j < s->num_dependencies; j++)
         {
-            dep_value[j] = get_slot_value(s->dependencies[j]);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                dep_value[b][j] = get_slot_value(s->dependencies[j], b);
+            }
         }
 
         switch (s->operation)
@@ -260,58 +305,91 @@ void compute_grad(int slot)
         case ADD:
             for (int i = 0; i < s->num_dependencies; i++)
             {
-                slots[s->dependencies[i]].gradient += s->gradient;
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[s->dependencies[i]].gradient[b] += s->gradient[b];
+                }
             }
             break;
 
         case MULTIPLY:
             for (int i = 0; i < s->num_dependencies; i++)
             {
-                double product = 1.0;
-                for (int j = 0; j < s->num_dependencies; j++)
+                for (int b = 0; b < BATCH_SIZE; b++)
                 {
-                    if (i != j)
-                        product *= dep_value[j];
+                    double product = 1.0;
+                    for (int j = 0; j < s->num_dependencies; j++)
+                    {
+                        if (i != j)
+                            product *= dep_value[b][j];
+                    }
+                    slots[s->dependencies[i]].gradient[b] += s->gradient[b] * product;
                 }
-                slots[s->dependencies[i]].gradient += s->gradient * product;
             }
             break;
 
         case SUB:
-            slots[s->dependencies[0]].gradient += s->gradient;
-            slots[s->dependencies[1]].gradient -= s->gradient;
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                slots[s->dependencies[1]].gradient[b] -= s->gradient[b];
+            }
             break;
 
         case POW2:
-            slots[s->dependencies[0]].gradient += s->gradient * 2.0 * dep_value[0];
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dep_value[b][0];
+            }
             break;
 
         case SIGMOID:
-            slots[s->dependencies[0]].gradient += s->gradient * s->value * (1.0 - s->value);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b] * (1.0 - s->value[b]);
+            }
             break;
 
         case RELU:
-            if (dep_value[0] > 0)
+            for (int b = 0; b < BATCH_SIZE; b++)
             {
-                slots[s->dependencies[0]].gradient += s->gradient;
+                if (dep_value[b][0] > 0)
+                {
+                    slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                }
             }
             break;
 
         case EXP:
-            slots[s->dependencies[0]].gradient += s->gradient * s->value;
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b];
+            }
             break;
 
         case NEG:
-            slots[s->dependencies[0]].gradient += s->gradient * -1.0;
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * -1.0;
+            }
             break;
 
         case DIV:
-            slots[s->dependencies[0]].gradient += s->gradient / dep_value[1];
-            slots[s->dependencies[1]].gradient -= s->gradient * dep_value[0] / (dep_value[1] * dep_value[1]);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] / dep_value[b][1];
+                slots[s->dependencies[1]].gradient[b] -= s->gradient[b] * dep_value[b][0] / (dep_value[b][1] * dep_value[b][1]);
+            }
             break;
 
         case LOG:
-            slots[s->dependencies[0]].gradient += s->gradient * (1.0 / dep_value[0]);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+
+                slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dep_value[b][0]);
+            }
             break;
 
         default:
@@ -368,7 +446,7 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
             // Input layer
             for (int i = 0; i < layer_sizes[layer]; i++)
             {
-                curr_layer_slots[i] = create_value_slot(0.0, 0);
+                curr_layer_slots[i] = create_value_slot(0);
             }
         }
         else
@@ -378,8 +456,12 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                 int sum = -1;
                 for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
                 {
-                    double weight_init = he_init(layer_sizes[layer - 1]);
-                    int weight = create_value_slot(weight_init, 1);
+                    int weight = create_value_slot(1);
+                    for (int b = 0; b < BATCH_SIZE; b++)
+                    {
+                        double weight_init = he_init(layer_sizes[layer - 1]);
+                        set_slot_value(weight, b, weight_init);
+                    }
                     int mul = create_operation_slot(MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2);
 
                     if (sum == -1)
@@ -392,7 +474,8 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                     }
                 }
 
-                int bias = create_value_slot(0.01, 1);
+                int bias = create_value_slot(1);
+                // TODO initialise bias if needed
                 int biased = create_operation_slot(ADD, wrap_in_array(sum, bias), 2);
                 curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1);
             }
@@ -461,7 +544,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     for (int i = 0; i < num_outputs; i++)
     {
-        target_slots[i] = create_value_slot(0, 0);
+        target_slots[i] = create_value_slot(0);
     }
 
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
@@ -478,40 +561,52 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
         {
             for (int j = 0; j < slot_count; j++)
             {
-                slots[j].gradient = 0.0;
-                slots[j].visited = 0;
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    slots[j].gradient[b] = 0.0;
+                    slots[j].visited = 0;
+                }
             }
 
             for (int k = 0; k < num_inputs; k++)
             {
-                set_slot_value(k, inputs[i][k]);
+                for (int b = 0; b < BATCH_SIZE; b++)
+                {
+                    set_slot_value(k, b, inputs[i][k]);
+                }
             }
 
             // one hot
             for (int l = 1; l <= num_outputs; l++)
             {
-                if (l == labels[i])
+                for (int b = 0; b < BATCH_SIZE; b++)
                 {
-                    set_slot_value(target_slots[l - 1], 1);
-                }
-                else
-                {
-                    set_slot_value(target_slots[l - 1], 0);
+                    if (l == labels[i])
+                    {
+                        set_slot_value(target_slots[l - 1], b, 1);
+                    }
+                    else
+                    {
+                        set_slot_value(target_slots[l - 1], b, 0);
+                    }
                 }
             }
 
             compute_graph(loss_slot);
 
-            total_loss += get_slot_value(loss_slot);
-
-            slots[loss_slot].gradient = 1.0;
-
-            printf("Softmax: ");
-            for (int j = 0; j < num_outputs; j++)
+            for (int b = 0; b < BATCH_SIZE; b++)
             {
-                printf("%f ", get_slot_value(softmax_slots[j]));
+                total_loss += get_slot_value(loss_slot, b);
+
+                slots[loss_slot].gradient[b] = 1.0;
+
+                printf("Softmax: ");
+                for (int j = 0; j < num_outputs; j++)
+                {
+                    printf("%f ", get_slot_value(softmax_slots[j], b));
+                }
+                printf("\n");
             }
-            printf("\n");
 
             compute_grad(loss_slot);
 
@@ -519,29 +614,15 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 if (slots[j].learnable_param == 1)
                 {
-                    set_slot_value(j, get_slot_value(j) - learning_rate * slots[j].gradient);
-                }
-                double beta1 = 0.9;   // Momentum decay factor
-                double beta2 = 0.999; // RMSProp decay factor
-                double epsilon = 1e-8;
-
-                for (int j = 0; j < slot_count; j++)
-                {
-                    if (slots[j].learnable_param == 1)
+                    double grad_sum = 0.0;
+                    for (int b = 0; b < BATCH_SIZE; b++)
                     {
-                        if (slots[j].momentum == 0 && slots[j].rms == 0)
-                        {
-                            slots[j].momentum = 0;
-                            slots[j].rms = 0;
-                        }
+                        grad_sum += slots[j].gradient[b];
+                    }
 
-                        slots[j].momentum = beta1 * slots[j].momentum + (1 - beta1) * slots[j].gradient;
-                        slots[j].rms = beta2 * slots[j].rms + (1 - beta2) * (slots[j].gradient * slots[j].gradient);
-
-                        double corrected_momentum = slots[j].momentum / (1 - beta1);
-                        double corrected_rms = slots[j].rms / (1 - beta2);
-
-                        set_slot_value(j, get_slot_value(j) - (learning_rate * corrected_momentum) / (sqrt(corrected_rms) + epsilon));
+                    for (int b = 0; b < BATCH_SIZE; b++)
+                    {
+                        set_slot_value(j, b, get_slot_value(j, b) - learning_rate * grad_sum / BATCH_SIZE);
                     }
                 }
             }
