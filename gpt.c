@@ -5,7 +5,8 @@
 #include <string.h>
 
 #define MAX_SLOTS 1000000
-#define BATCH_SIZE 1
+#define BATCH_SIZE 50
+#define MAX_DEPENDENCY 10000
 
 typedef enum
 {
@@ -127,10 +128,12 @@ int create_value_slot(int learnable_param)
     slots[slot_count].num_dependencies = 0;
     slots[slot_count].learnable_param = learnable_param;
 
-    // if (learnable_param == 1)
-    // {
-    //     slots[slot_count].value = random_init();
-    // }
+    if (learnable_param == 1)
+    {
+        // for(int b=0; b<BATCH_SIZE; b++){
+        //    slots[slot_count].value[b] = random_init();
+        // }
+    }
 
     return increment_slot();
 }
@@ -140,7 +143,7 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies)
     slots[slot_count].operation = op;
     slots[slot_count].dependencies = dep;
     slots[slot_count].num_dependencies = num_dependencies;
-
+    slots[slot_count].value = (double *)malloc(BATCH_SIZE * sizeof(double));
     slots[slot_count].gradient = (double *)malloc(BATCH_SIZE * sizeof(double));
     slots[slot_count].learnable_param = 0;
     return increment_slot();
@@ -161,24 +164,24 @@ double get_slot_value(int slot, int b_index)
     return slots[slot].value[b_index];
 }
 
-double _sum(double *list, int length)
+double _sum(double **list, int b, int length)
 {
     double total = 0;
     for (int i = 0; i < length; i++)
     {
-        total += list[i];
+        total += list[i][b];
     }
     return total;
 }
 
-double _mul(double *list, int length)
+double _mul(double **list, int b, int length)
 {
     double product;
 
     product = 1.0;
     for (int i = 0; i < length; i++)
     {
-        product *= list[i];
+        product *= list[i][b];
     }
 
     return product;
@@ -209,13 +212,13 @@ double *compute_graph(int slot)
         case ADD:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = _sum(dep_value[b], s->num_dependencies);
+                s->value[b] = _sum(dep_value, b, s->num_dependencies);
             }
             break;
         case MULTIPLY:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = _mul(dep_value[b], s->num_dependencies);
+                s->value[b] = _mul(dep_value, b, s->num_dependencies);
             }
             break;
 
@@ -223,13 +226,13 @@ double *compute_graph(int slot)
 
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = exp(dep_value[b][0]);
+                s->value[b] = exp(dep_value[0][b]);
             }
             break;
         case DIV:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = dep_value[b][0] / dep_value[b][1];
+                s->value[b] = dep_value[0][b] / dep_value[1][b];
             }
 
             break;
@@ -237,41 +240,41 @@ double *compute_graph(int slot)
         case NEG:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = -dep_value[b][0];
+                s->value[b] = -dep_value[0][b];
             }
             break;
 
         case LOG:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = log(dep_value[b][0]);
+                s->value[b] = log(dep_value[0][b]);
             }
             break;
 
         case SUB:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = dep_value[b][0] - dep_value[b][0];
+                s->value[b] = dep_value[0][b] - dep_value[0][b];
             }
             break;
         case POW2:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                s->value[b] = dep_value[b][0] * dep_value[b][0];
+                s->value[b] = dep_value[0][b] * dep_value[0][b];
             }
             break;
         case SIGMOID:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
 
-                s->value[b] = 1.0 / (1.0 + exp(-dep_value[b][0]));
+                s->value[b] = 1.0 / (1.0 + exp(-dep_value[0][b]));
             }
             break;
         case RELU:
             for (int b = 0; b < BATCH_SIZE; b++)
             {
 
-                s->value[b] = fmax(0.0, dep_value[b][0]);
+                s->value[b] = fmax(0.0, dep_value[0][b]);
             }
             break;
         default:
@@ -284,14 +287,17 @@ double *compute_graph(int slot)
     return s->value;
 }
 
+double *dep_value[BATCH_SIZE];
+
 void compute_grad(int slot)
 {
+
     // printf("Computing gradient for slot %d with operation %d\n", slot, slots[slot].operation);
     Slot *s = &slots[slot];
 
     if (s->num_dependencies > 0)
     {
-        double *dep_value[s->num_dependencies];
+
         for (int j = 0; j < s->num_dependencies; j++)
         {
             for (int b = 0; b < BATCH_SIZE; b++)
@@ -313,17 +319,16 @@ void compute_grad(int slot)
             break;
 
         case MULTIPLY:
-            for (int i = 0; i < s->num_dependencies; i++)
+            for (int b = 0; b < BATCH_SIZE; b++)
             {
-                for (int b = 0; b < BATCH_SIZE; b++)
+                double product = 1.0;
+                for (int j = 0; j < s->num_dependencies; j++)
                 {
-                    double product = 1.0;
-                    for (int j = 0; j < s->num_dependencies; j++)
-                    {
-                        if (i != j)
-                            product *= dep_value[b][j];
-                    }
-                    slots[s->dependencies[i]].gradient[b] += s->gradient[b] * product;
+                    product *= dep_value[b][j];
+                }
+                for (int i = 0; i < s->num_dependencies; i++)
+                {
+                    slots[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dep_value[b][i]);
                 }
             }
             break;
@@ -553,12 +558,23 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     // export_graph_to_dot("test.dot");
 
-    for (int epoch = 0; epoch < 100; epoch++) // Reduced number of epochs
+    // this is to setup batch operations ; will think of something better
+    for (int b = 0; b < BATCH_SIZE; b++)
     {
+        dep_value[b] = (double *)malloc(MAX_DEPENDENCY * sizeof(double));
+    }
+
+    int EPOCHS = 10;
+
+    for (int epoch = 0; epoch < EPOCHS; epoch++) // Reduced number of epochs
+    {
+        printf("Epoch: %d/%d\n", epoch + 1, EPOCHS);
         double total_loss = 0.0;
 
-        for (int i = 0; i < num_samples; i++)
+        for (int i = 0; i < num_samples; i += BATCH_SIZE)
         {
+            double batch_loss = 0.0;
+            // clearing stuff for the batch, but i think visited needs to be done again and again? nope it's right
             for (int j = 0; j < slot_count; j++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
@@ -568,11 +584,12 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 }
             }
 
+            // setting inputs, we pack in the batch quantity into our network input neurons
             for (int k = 0; k < num_inputs; k++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
-                    set_slot_value(k, b, inputs[i][k]);
+                    set_slot_value(k, b, inputs[i + b][k]);
                 }
             }
 
@@ -581,7 +598,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
-                    if (l == labels[i])
+                    if (l == labels[i + b])
                     {
                         set_slot_value(target_slots[l - 1], b, 1);
                     }
@@ -597,18 +614,23 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             for (int b = 0; b < BATCH_SIZE; b++)
             {
                 total_loss += get_slot_value(loss_slot, b);
+                batch_loss += get_slot_value(loss_slot, b);
 
                 slots[loss_slot].gradient[b] = 1.0;
-
-                printf("Softmax: ");
-                for (int j = 0; j < num_outputs; j++)
-                {
-                    printf("%f ", get_slot_value(softmax_slots[j], b));
-                }
-                printf("\n");
             }
 
+            printf("Avg. Batch Loss %lf \nSoftmax(sample): ", batch_loss / BATCH_SIZE);
+            for (int j = 0; j < num_outputs; j++)
+            {
+                printf("%f ", get_slot_value(softmax_slots[j], 0));
+            }
+            printf("\n");
+
+            clock_t start_time = clock();
             compute_grad(loss_slot);
+            clock_t end_time = clock();
+            double time_taken = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
+            printf("Time taken to propogate gradients: %f seconds\n\n", time_taken);
 
             for (int j = 0; j < slot_count; j++)
             {
@@ -628,7 +650,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             }
         }
 
-        printf("Epoch %d, Loss: %f\n", epoch, total_loss / num_samples);
+        printf("Epoch %d, Avg. Loss: %f\n", epoch, total_loss / num_samples);
     }
 }
 
@@ -642,7 +664,7 @@ int main()
     }
 
     int input_size = 784;
-    int num_samples = 100;
+    int num_samples = 10000;
     int labels[num_samples];
 
     double **inputs = (double **)malloc(num_samples * sizeof(double *));
@@ -672,7 +694,7 @@ int main()
 
     double learning_rate = 0.01;
 
-    int layer_sizes[] = {784, 10, 10}; // first is input, last is output
+    int layer_sizes[] = {784, 64, 10}; // first is input, last is output
     int num_layers = 3;
 
     train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers);
