@@ -4,7 +4,7 @@
 #include <time.h>
 #include <string.h>
 
-#define MAX_SLOTS 1000000
+#define MAX_SLOTS 10000000
 #define BATCH_SIZE 100
 #define MAX_DEPENDENCY 1000
 
@@ -579,7 +579,7 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
     return neg_cross_entropy;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers)
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers, int *index_to_char, int vocab_size)
 {
 
     int num_inputs = layer_sizes[0];
@@ -607,7 +607,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
         dependency_buffer[b] = (double *)malloc(MAX_DEPENDENCY * sizeof(double));
     }
 
-    int EPOCHS = 100;
+    int EPOCHS = 10000;
 
     for (int epoch = 0; epoch < EPOCHS; epoch++) // Reduced number of epochs
     {
@@ -685,10 +685,61 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 }
             }
         }
-        printf("Softmax(sample): ");
-        for (int j = 0; j < num_outputs; j++)
+
+        int seq_len = num_inputs / vocab_size;
+        int max_index = -111;
+        printf("\n__________________\n");
+        for (int k = 0; k < num_inputs; k++)
         {
-            printf("%f ", get_slot_value(softmax_slots[j], 0));
+            set_slot_value(k, 0, inputs[0][k]);
+            printf("%c", index_to_char[(int)inputs[0][k]]);
+        }
+        printf("\n__________________\n");
+
+        for (int p = 0; p < 50; p++)
+        {
+            if (max_index != -111)
+            {
+                for (int k = 0; k < (seq_len - 1); k++)
+                {
+                    set_slot_value(k, 0, inputs[0][k + 1]); // shifting
+                }
+                inputs[0][(seq_len - 1)] = max_index;
+            }
+
+            compute_graph(loss_slot);
+
+            double temperature = 0.6;
+            double softmax_values[num_outputs];
+            double exp_sum = 0.0;
+
+            for (int j = 0; j < num_outputs; j++)
+            {
+                double raw_value = get_slot_value(softmax_slots[j], 0);
+                softmax_values[j] = exp(raw_value / temperature);
+                exp_sum += softmax_values[j];
+            }
+
+            for (int j = 0; j < num_outputs; j++)
+            {
+                softmax_values[j] /= exp_sum;
+            }
+
+            double cumulative_prob = 0.0;
+            double random_value = (double)rand() / RAND_MAX;
+            int max_index = -111;
+
+            for (int j = 0; j < num_outputs; j++)
+            {
+                cumulative_prob += softmax_values[j];
+                if (random_value <= cumulative_prob)
+                {
+                    max_index = j;
+                    break;
+                }
+            }
+
+            printf("%c", (char)index_to_char[max_index]);
         }
         printf("\n");
 
@@ -715,12 +766,12 @@ int main()
     data[data_length] = '\0';
     fclose(file);
 
-    int MAX_CHARACTERS = 64;
+    int MAX_CHARACTERS = 256;
     int SEQUENCE_LENGTH = 4;
 
-    int char_to_index[MAX_CHARACTERS];
+    int char_to_index[256];
     int index_to_char[MAX_CHARACTERS];
-    for (int i = 0; i < MAX_CHARACTERS; i++)
+    for (int i = 0; i < 256; i++)
     {
         char_to_index[i] = -1;
     }
@@ -740,9 +791,9 @@ int main()
     int input_size = SEQUENCE_LENGTH;
     int num_samples = data_length - SEQUENCE_LENGTH;
 
-    if (num_samples > 10000)
+    if (num_samples > 1000)
     {
-        num_samples = 10000;
+        num_samples = 1000;
     }
 
     int labels[num_samples];
@@ -758,10 +809,8 @@ int main()
         for (int j = 0; j < input_size; j++)
         {
             unsigned char c = data[i + j];
-            for (int k = 0; k < MAX_CHARACTERS; k++)
-            {
-                inputs[i][j * MAX_CHARACTERS + k] = (char_to_index[c] == k) ? 1.0 : 0.0;
-            }
+
+            inputs[i][j] = char_to_index[c];
         }
 
         unsigned char next_char = data[i + SEQUENCE_LENGTH];
@@ -769,11 +818,11 @@ int main()
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size * MAX_CHARACTERS, 128, vocab_size}; // Adjusted for next character prediction
+    int layer_sizes[] = {input_size, 64, vocab_size}; // Adjusted for next character prediction
 
     int num_layers = 3;
 
-    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers);
+    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers, index_to_char, vocab_size);
 
     return 0;
 }
