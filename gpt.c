@@ -199,9 +199,6 @@ double _mul(double **list, int b, int length)
 
 double *compute_graph(int slot)
 {
-
-    // printf("Computing value for slot %d\n", slot);
-
     Slot *s = &slots[slot];
 
     if (s->visited)
@@ -309,14 +306,12 @@ double *compute_graph(int slot)
     }
 
     s->visited = 1;
-    // printf("Slot %d: Value = %.2f\n", slot, s->value);
     return s->value;
 }
 
 void compute_grad(int slot)
 {
 
-    // printf("Computing gradient for slot %d with operation %d\n", slot, slots[slot].operation);
     for (int curr = slot; curr >= 0; curr--)
     {
         Slot *s = &slots[curr];
@@ -474,7 +469,6 @@ double xavier_init(int fan_in, int fan_out)
 double he_init(int fan_in)
 {
     double std = sqrt(2.0 / fan_in);
-    // Box-Muller transform for normal distribution
     double u1 = (double)rand() / RAND_MAX;
     double u2 = (double)rand() / RAND_MAX;
     return std * sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
@@ -491,7 +485,6 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
 
         if (layer == 0)
         {
-            // Input layer
             for (int i = 0; i < layer_sizes[layer]; i++)
             {
                 curr_layer_slots[i] = create_value_slot(0);
@@ -523,7 +516,6 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                 }
 
                 int bias = create_value_slot(1);
-                // TODO initialise bias if needed
                 int biased = create_operation_slot(ADD, wrap_in_array(sum, bias), 2);
                 curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1);
             }
@@ -558,7 +550,6 @@ int *create_softmax_layer(int *input_slots, int num_outputs)
         softmax_slots[i] = create_operation_slot(DIV, wrap_in_array(exp_slots[i], sum_slot), 2);
     }
 
-    // free(exp_slots);
     return softmax_slots;
 }
 
@@ -599,9 +590,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     srand(time(NULL));
 
-    // export_graph_to_dot("test.dot");
-
-    // this is to setup batch operations ; will think of something better
     for (int b = 0; b < BATCH_SIZE; b++)
     {
         dependency_buffer[b] = (double *)malloc(MAX_DEPENDENCY * sizeof(double));
@@ -609,16 +597,14 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     int EPOCHS = 10000;
 
-    for (int epoch = 0; epoch < EPOCHS; epoch++) // Reduced number of epochs
+    for (int epoch = 0; epoch < EPOCHS; epoch++)
     {
         printf("Epoch: %d/%d\n", epoch + 1, EPOCHS);
         double total_loss = 0.0;
 
         for (int i = 0; i < num_samples; i += BATCH_SIZE)
         {
-            double batch_loss = 0.0;
-            // clearing stuff for the batch, but i think visited needs to be done again and again? nope it's right
-            for (int j = 0; j < slot_counter; j++)
+            double batch_loss = 0.0;            for (int j = 0; j < slot_counter; j++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
@@ -627,7 +613,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 }
             }
 
-            // setting inputs, we pack in the batch quantity into our network input neurons
             for (int k = 0; k < num_inputs; k++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
@@ -636,7 +621,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 }
             }
 
-            // one hot
             for (int l = 1; l <= num_outputs; l++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
@@ -666,7 +650,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             compute_grad(loss_slot);
             clock_t end_time = clock();
             double time_taken = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
-            // printf("Time taken to propogate gradients: %f seconds\n\n", time_taken);
 
             for (int j = 0; j < slot_counter; j++)
             {
@@ -702,7 +685,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 for (int k = 0; k < (seq_len - 1); k++)
                 {
-                    set_slot_value(k, 0, inputs[0][k + 1]); // shifting
+                    set_slot_value(k, 0, inputs[0][k + 1]);
                 }
                 inputs[0][(seq_len - 1)] = max_index;
             }
@@ -801,7 +784,7 @@ int main()
     double **inputs = (double **)malloc(num_samples * sizeof(double *));
     for (int i = 0; i < num_samples; i++)
     {
-        inputs[i] = (double *)malloc(input_size * sizeof(double)); // Allocate space for each sample
+        inputs[i] = (double *)malloc(input_size * sizeof(double));
     }
 
     for (int i = 0; i < num_samples; i++)
@@ -818,7 +801,7 @@ int main()
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size, 64, vocab_size}; // Adjusted for next character prediction
+    int layer_sizes[] = {input_size, 64, vocab_size};
 
     int num_layers = 3;
 
