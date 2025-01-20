@@ -138,13 +138,6 @@ int create_value_slot(int learnable_param)
     slots[slot_counter].num_dependencies = 0;
     slots[slot_counter].learnable_param = learnable_param;
 
-    if (learnable_param == 1)
-    {
-        // for(int b=0; b<BATCH_SIZE; b++){
-        //    slots[slot_counter].value[b] = random_init();
-        // }
-    }
-
     return increment_slot();
 }
 
@@ -604,7 +597,8 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
         for (int i = 0; i < num_samples; i += BATCH_SIZE)
         {
-            double batch_loss = 0.0;            for (int j = 0; j < slot_counter; j++)
+            double batch_loss = 0.0;
+            for (int j = 0; j < slot_counter; j++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
