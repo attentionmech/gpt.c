@@ -9,8 +9,13 @@ gpt implemented in C [ongoing dev]
 - [X] Implement ReLU and Softmax
 - [X] Loss function MSE
 - [X] XOR Test
-- [X] Add memory management (object tracking, cleanup)
+- [X] Add memory management ~~(object tracking, cleanup)~~ (slot system, objects occupy limited slots)
 - [X] MNIST Test
+- [X] Implement Batching (major speedups)
+- [X] Implemented GELU, Leaky RELU (all done as part of testing)
+- [X] Implement iterative stack based backward pass (didn't do much benefit/ so removed)
+- [X] Test the MLP with character prediction (Issues encounters: network stabiliy)
+- [ ] Implement n dimensional tensors
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
@@ -29,4 +34,5 @@ Current State:
 - ~~too much object reallocation, design needs to change~~
 - ~~Gradients are not converging properly~~
 - ~~MNIST Test failed because of memory leaks.~~
-- Slow network convergence for large MLP
+- ~~Slow network convergence for large MLP~~
+- Network facing vanishing gradient issue
