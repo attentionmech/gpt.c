@@ -15,6 +15,7 @@ gpt implemented in C [ongoing dev]
 - [X] Implemented GELU, Leaky RELU (all done as part of testing)
 - [X] Implement iterative stack based backward pass (didn't do much benefit/ so removed)
 - [X] Test the MLP with character prediction (Issues encounters: network stabiliy)
+- [ ] Implement n dimensional tensors
 - [ ] Implement Self-Attention Mechanism  
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
