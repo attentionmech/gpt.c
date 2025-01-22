@@ -206,13 +206,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
         int seq_len = num_inputs / vocab_size;
         int max_index = -111;
-        // printf("\n__________________\n");
-        // for (int k = 0; k < num_inputs; k++)
-        // {
-        //     set_slot_value(k, 0, inputs[0][k]);
-        //     printf("%c", index_to_char[(int)inputs[0][k]]);
-        // }
-        // printf("\n__________________\n");
 
         for (int p = 0; p < 50; p++)
         {
