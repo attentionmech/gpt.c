@@ -1,6 +1,10 @@
 #include "basicgrad.h"
 
+#define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
+
 int slot_counter = 0;
+
+double **dependency_buffer;
 
 const char *get_operation_name(OperationType op)
 {
@@ -103,6 +107,12 @@ int create_value_slot(int learnable_param, int *shape, int num_dimensions)
         total_size *= shape[i];
     }
 
+    if (total_size > MAX_ELEMENTS)
+    {
+        fprintf(stderr, "Error: Exceeded maximum number of elements in a single tensor (%d)\n", MAX_ELEMENTS);
+        exit(EXIT_FAILURE);
+    }
+
     slots[slot_counter].size = total_size;
 
     slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
@@ -141,6 +151,13 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies, int 
     {
         total_size *= shape[i];
     }
+
+    if (total_size > MAX_ELEMENTS)
+    {
+        fprintf(stderr, "Error: Exceeded maximum number of elements in a single tensor (%d)\n", MAX_ELEMENTS);
+        exit(EXIT_FAILURE);
+    }
+
     slots[slot_counter].size = total_size;
     slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
     slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
@@ -157,10 +174,8 @@ void set_slot_value(int slot, int b_index, double v)
 
 double get_slot_value(int slot, int index)
 {
-    printf("slot: %d index: %d\n", slot, index);
     if (index >= slots[slot].size)
     {
-        printf("slot: %d size: %d\n", slot, slots[slot].size);
         fprintf(stderr, "Error: Index out of bounds\n");
         exit(EXIT_FAILURE);
     }
@@ -305,11 +320,13 @@ double *compute_graph(int slot)
 void compute_grad(int slot)
 {
 
-    double **dependency_buffer = (double **)malloc(slots[slot].size * sizeof(double *));
-
-    for (int b = 0; b < slots[slot].size; b++)
+    if (dependency_buffer == NULL)
     {
-        dependency_buffer[b] = (double *)malloc(slots[slot].num_dependencies * sizeof(double));
+        dependency_buffer = (double **)malloc(MAX_ELEMENTS * sizeof(double *));
+        for (int b = 0; b < MAX_ELEMENTS; b++)
+        {
+            dependency_buffer[b] = (double *)malloc(slots[slot].num_dependencies * sizeof(double));
+        }
     }
 
     for (int curr = slot; curr >= 0; curr--)
@@ -441,11 +458,7 @@ void compute_grad(int slot)
             default:
                 break;
             }
-            for (int b = 0; b < slots[slot].size; b++)
-            {
-                free(dependency_buffer[b]);
-            }
-            free(dependency_buffer);
+            
         }
     }
 }
