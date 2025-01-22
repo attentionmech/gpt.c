@@ -9,8 +9,6 @@
 
 
 #define MAX_SLOTS 10000000
-#define BATCH_SIZE 100
-#define MAX_DEPENDENCY 1000
 
 typedef enum
 {
@@ -33,26 +31,32 @@ typedef enum
 
 typedef struct
 {
-    double *value;
-    double *gradient;
-    OperationType operation;
-    int *dependencies;
-    int num_dependencies;
-    int learnable_param;
+    double *value;          
+    double *gradient;       
+    int *shape;             
+    int *strides;           
+    int num_dimensions;
+    int size;     
+    OperationType operation; 
+    int *dependencies;      
+    int num_dependencies;   
+    int learnable_param;    
     int visited;
 } Slot;
+
 
 Slot slots[MAX_SLOTS];
 
 
+int create_value_slot(int learnable_param, int *shape, int num_dimensions);
+int create_operation_slot(OperationType op, int *dep, int num_dependencies, int *shape, int num_dimensions);
+
 double get_slot_value(int slot, int b_index);
 void set_slot_value(int slot, int b_index, double v);
-double *compute_graph(int slot);
-int *create_softmax_layer(int *input_slots, int num_outputs);
-int *create_feedforward_network(int *layer_sizes, int num_layers);
-int create_value_slot(int learnable_param);
-int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_outputs);
-int zerograd();
+
 void compute_grad(int slot);
+double *compute_graph(int slot);
+
+int zerograd();
 
 #endif
