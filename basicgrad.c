@@ -167,6 +167,26 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies, int 
     return increment_slot();
 }
 
+void set_slot_value_by_position(int slot, int* position, int num_dimensions, double value)
+{
+    int pos = 0;
+    for (int i = 0; i < num_dimensions-1; i++)
+    {
+        pos += slots[slot].strides[i]*position[i];
+    }
+    pos += position[num_dimensions-1];
+
+
+    if (pos >= slots[slot].size)
+    {
+        fprintf(stderr, "Error: Index out of bounds\n");
+        exit(EXIT_FAILURE);
+    }
+
+    slots[slot].value[pos] = value;
+    
+}
+
 void set_slot_value(int slot, int b_index, double v)
 {
     slots[slot].value[b_index] = v;
@@ -181,6 +201,25 @@ double get_slot_value(int slot, int index)
     }
     return slots[slot].value[index];
 }
+
+double get_slot_value_by_position(int slot, int* position, int num_dimensions)
+{
+    int pos = 0;
+    for (int i = 0; i < num_dimensions - 1; i++)
+    {
+        pos += slots[slot].strides[i] * position[i];
+    }
+    pos += position[num_dimensions - 1];
+
+    if (pos >= slots[slot].size)
+    {
+        fprintf(stderr, "Error: Index out of bounds\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return slots[slot].value[pos];
+}
+
 
 double _sum(double **list, int b, int length)
 {

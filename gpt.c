@@ -50,11 +50,11 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                 int sum = -1;
                 for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
                 {
-                    int weight = create_value_slot(1, (int[]){BATCH_SIZE,1},2);
+                    int weight = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
                     for (int b = 0; b < slots[weight].size; b++)
                     {
                         double weight_init = he_init(layer_sizes[layer - 1]);
-                        set_slot_value(weight, b, weight_init);
+                        set_slot_value_by_position(weight, (int[]){b,0},2, weight_init);
                     }
                     int mul = create_operation_slot(MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2, (int[]){BATCH_SIZE, 1}, 2);
 
@@ -68,7 +68,7 @@ int *create_feedforward_network(int *layer_sizes, int num_layers)
                     }
                 }
 
-                int bias = create_value_slot(1, (int[]){BATCH_SIZE,1},2);
+                int bias = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
                 int biased = create_operation_slot(ADD, wrap_in_array(sum, bias), 2, (int[]){BATCH_SIZE, 1}, 2);
                 curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
             }
@@ -123,18 +123,16 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
     return neg_cross_entropy;
 }
 
-
 void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers, int *index_to_char, int vocab_size)
 {
 
     int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
 
-    int target_slots[num_outputs];
-
     int *output_slots = create_feedforward_network(layer_sizes, num_layers);
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
 
+    int target_slots[num_outputs];
     for (int i = 0; i < num_outputs; i++)
     {
         target_slots[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
@@ -144,8 +142,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     srand(time(NULL));
 
-    
-
     int EPOCHS = 10000;
 
     for (int epoch = 0; epoch < EPOCHS; epoch++)
@@ -154,14 +150,14 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
         for (int i = 0; i < num_samples; i += BATCH_SIZE)
         {
-            
+
             zerograd();
 
             for (int k = 0; k < num_inputs; k++)
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
-                    set_slot_value(k, b, inputs[i + b][k]);
+                    set_slot_value_by_position(k, (int[]){b,0},2, inputs[i + b][k]);
                 }
             }
 
@@ -171,11 +167,11 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 {
                     if (l == labels[i + b])
                     {
-                        set_slot_value(target_slots[l - 1], b, 1);
+                        set_slot_value_by_position(target_slots[l - 1], (int[]){b,0},2, 1);
                     }
                     else
                     {
-                        set_slot_value(target_slots[l - 1], b, 0);
+                        set_slot_value_by_position(target_slots[l - 1], (int[]){b,0},2, 0);
                     }
                 }
             }
@@ -184,12 +180,12 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                total_loss += get_slot_value(loss_slot, b);
+                total_loss += get_slot_value_by_position(loss_slot, (int[]){b,0},2);
                 slots[loss_slot].gradient[b] = 1.0;
             }
 
             compute_grad(loss_slot);
-            
+
             for (int j = 0; j < slot_counter; j++)
             {
                 if (slots[j].learnable_param == 1)
@@ -202,7 +198,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
                     for (int b = 0; b < slots[j].size; b++)
                     {
-                        set_slot_value(j, b, get_slot_value(j, b) - learning_rate * grad_sum / slots[j].size);
+                        set_slot_value_by_position(j, (int[]){b,0},2, get_slot_value_by_position(j, (int[]){b,0},2) - learning_rate * grad_sum / slots[j].size);
                     }
                 }
             }
@@ -224,7 +220,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 for (int k = 0; k < (seq_len - 1); k++)
                 {
-                    set_slot_value(k, 0, inputs[0][k + 1]);
+                    set_slot_value_by_position(k, (int[]){0,0},2, inputs[0][k + 1]);
                 }
                 inputs[0][(seq_len - 1)] = max_index;
             }
@@ -237,7 +233,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
             for (int j = 0; j < num_outputs; j++)
             {
-                double raw_value = get_slot_value(softmax_slots[j], 0);
+                double raw_value = get_slot_value_by_position(softmax_slots[j], (int[]){0,0},2);
                 softmax_values[j] = exp(raw_value / temperature);
                 exp_sum += softmax_values[j];
             }
@@ -268,7 +264,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
     }
 }
-
 
 int main()
 {
