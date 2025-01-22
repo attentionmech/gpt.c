@@ -10,24 +10,25 @@ gpt implemented in C [ongoing dev]
 - [X] Loss function MSE
 - [X] XOR Test
 - [X] Add memory management ~~(object tracking, cleanup)~~ (slot system, objects occupy limited slots)
+- [X] Construct forward and backward pass logic
 - [X] MNIST Test
 - [X] Implement Batching (major speedups)
 - [X] Implemented GELU, Leaky RELU (all done as part of testing)
 - [X] Implement iterative stack based backward pass (didn't do much benefit/ so removed)
 - [X] Test the MLP with character prediction (Issues encounters: network stabiliy)
-- [ ] Implement Self-Attention Mechanism
+- [X] Tinystories Test
 - [ ] Implement n dimensional tensors
+- [ ] Implement Self-Attention Mechanism
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
 - [ ] Implement Layer Normalization  
 - [ ] Stack Transformer Blocks  
-- [ ] Build a tokenization system (BPE)  
-- [ ] Implement data batching and shuffling  
+- [ ] Build a tokenization system (BPE)    
 - [ ] Design weight initialization and updates  
-- [ ] Construct forward and backward pass logic  
 - [ ] Implement text generation (Greedy Decoding)  
 - [ ] Add Beam Search for better inference  
-- [ ] Add performance metrics (perplexity, loss tracking)  
+- [ ] Add performance metrics (perplexity, loss tracking)
+- [ ] Implement data batching and shuffling
 
 Current State:
 
