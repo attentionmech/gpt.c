@@ -41,28 +41,55 @@ const char *get_operation_name(OperationType op)
     }
 }
 
-void export_graph_to_dot(const char *filename)
-{
+void export_graph_to_dot(const char *filename) {
     FILE *file = fopen(filename, "w");
-    if (!file)
-    {
+    if (!file) {
         fprintf(stderr, "Error opening file for writing Graphviz DOT file.\n");
         return;
     }
 
     fprintf(file, "digraph ComputationalGraph {\n");
-    fprintf(file, "    node [shape=circle, style=filled, fillcolor=lightblue];\n");
+    fprintf(file, "    rankdir=LR; // Left-to-right graph layout\n");
+    fprintf(file, "    node [shape=record, style=filled];\n");
 
-    for (int i = 0; i < slot_counter; i++)
-    {
+    for (int i = 0; i < slot_counter; i++) {
         Slot *s = &slots[i];
-        // Node definition with value, gradient, and operation type
-        fprintf(file, "    slot_%d [label=\"%d\\nVal: %.2f\\nGrad: %.2f\\nOp: %s\"];\n",
-                i, i, s->value[0], s->gradient[0], get_operation_name(s->operation));
 
-        // Edge definitions based on dependencies
-        for (int j = 0; j < s->num_dependencies; j++)
-        {
+        fprintf(file, "    slot_%d [label=\"{%d | {", i, i);
+
+        fprintf(file, "Op: %s", get_operation_name(s->operation));
+
+        if (s->num_dimensions > 0) {
+            fprintf(file, " | Shape: [");
+            for (int d = 0; d < s->num_dimensions; d++) {
+                fprintf(file, "%d", s->shape[d]);
+                if (d < s->num_dimensions - 1) fprintf(file, ", ");
+            }
+            fprintf(file, "]");
+        }
+
+        if (s->size > 0) {
+            fprintf(file, " | Val: %.2f", s->value[0]);
+            fprintf(file, " | Grad: %.2f", s->gradient[0]);
+        }
+
+        if (s->learnable_param) {
+            fprintf(file, " | Learnable");
+        }
+
+        fprintf(file, "}}\", fillcolor=");
+
+        if (s->operation == PARAMETER) {
+            fprintf(file, "lightgreen");
+        } else if (s->num_dependencies == 0) {
+            fprintf(file, "lightblue");
+        } else {
+            fprintf(file, "lightpink");
+        }
+
+        fprintf(file, "];\n");
+
+        for (int j = 0; j < s->num_dependencies; j++) {
             fprintf(file, "    slot_%d -> slot_%d;\n", s->dependencies[j], i);
         }
     }

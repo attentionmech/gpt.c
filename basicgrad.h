@@ -62,4 +62,6 @@ int zerograd();
 void set_slot_value_by_position(int slot, int* position, int num_dimensions, double value);
 double get_slot_value_by_position(int slot, int* position, int num_dimensions);
 
+void export_graph_to_dot(const char *filename);
+
 #endif
