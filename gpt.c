@@ -4,6 +4,11 @@ extern int slot_counter;
 
 #define BATCH_SIZE 10
 
+typedef enum {
+    LAYER_FEEDFORWARD,
+    LAYER_ATTENTION
+} LayerType;
+
 int *wrap_value_in_array(int a)
 {
     int *arr = malloc(1 * sizeof(int));
@@ -224,9 +229,9 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers, int *index_to_char, int vocab_size)
-{
 
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size)
+{
     int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
 
@@ -245,19 +250,24 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     for (int i = 1; i < num_layers; i++)
     {
-        if (layer_sizes[i] == -1)
+        if (layer_types[i] == LAYER_ATTENTION)
         {
-            curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], 4);
+            curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], 4); // Assuming d_model = 4
         }
-        else
+        else if (layer_types[i] == LAYER_FEEDFORWARD)
         {
             curr_layer = create_feedforward_network(prev_layer, layer_sizes[i - 1], layer_sizes[i]);
         }
+        else
+        {
+            fprintf(stderr, "Unknown layer type at index %d\n", i);
+            exit(1);
+        }
+
         if (prev_layer)
             free(prev_layer);
         prev_layer = curr_layer;
     }
-
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
 
@@ -462,11 +472,12 @@ int main()
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size, 4, 4, vocab_size};
+    int layer_sizes[] = {input_size, 4, vocab_size};
+    LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
 
-    int num_layers = 4;
+    int num_layers = 3;
 
-    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers, index_to_char, vocab_size);
+    train(inputs, labels, num_samples, learning_rate, layer_sizes, layer_types, num_layers, index_to_char, vocab_size);
 
     return 0;
 }
