@@ -1,10 +1,11 @@
 #include "basicgrad.h"
+#include <stdbool.h>
 
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 
 int slot_counter = 0;
-
 double **dependency_buffer;
+bool is_referenced[MAX_SLOTS] = {false}; // orphan detection, optional
 
 const char *get_operation_name(OperationType op)
 {
@@ -41,9 +42,34 @@ const char *get_operation_name(OperationType op)
     }
 }
 
-void export_graph_to_dot(const char *filename) {
+void detect_orphans()
+{
+
+    for (int i = 0; i < slot_counter; i++)
+    {
+        Slot *s = &slots[i];
+        for (int j = 0; j < s->num_dependencies; j++)
+        {
+            int dep_slot = s->dependencies[j];
+            is_referenced[dep_slot] = true;
+        }
+    }
+
+    printf("Orphan slots:\n");
+    for (int i = 0; i < slot_counter; i++)
+    {
+        if (!is_referenced[i] && slots[i].num_dependencies > 0)
+        {
+            printf("Slot %d (Operation: %s) is an orphan.\n", i, get_operation_name(slots[i].operation));
+        }
+    }
+}
+
+void export_graph_to_dot(const char *filename)
+{
     FILE *file = fopen(filename, "w");
-    if (!file) {
+    if (!file)
+    {
         fprintf(stderr, "Error opening file for writing Graphviz DOT file.\n");
         return;
     }
@@ -52,44 +78,56 @@ void export_graph_to_dot(const char *filename) {
     fprintf(file, "    rankdir=LR; // Left-to-right graph layout\n");
     fprintf(file, "    node [shape=record, style=filled];\n");
 
-    for (int i = 0; i < slot_counter; i++) {
+    for (int i = 0; i < slot_counter; i++)
+    {
         Slot *s = &slots[i];
 
         fprintf(file, "    slot_%d [label=\"{%d | {", i, i);
 
         fprintf(file, "Op: %s", get_operation_name(s->operation));
 
-        if (s->num_dimensions > 0) {
+        if (s->num_dimensions > 0)
+        {
             fprintf(file, " | Shape: [");
-            for (int d = 0; d < s->num_dimensions; d++) {
+            for (int d = 0; d < s->num_dimensions; d++)
+            {
                 fprintf(file, "%d", s->shape[d]);
-                if (d < s->num_dimensions - 1) fprintf(file, ", ");
+                if (d < s->num_dimensions - 1)
+                    fprintf(file, ", ");
             }
             fprintf(file, "]");
         }
 
-        if (s->size > 0) {
+        if (s->size > 0)
+        {
             fprintf(file, " | Val: %.2f", s->value[0]);
             fprintf(file, " | Grad: %.2f", s->gradient[0]);
         }
 
-        if (s->learnable_param) {
+        if (s->learnable_param)
+        {
             fprintf(file, " | Learnable");
         }
 
         fprintf(file, "}}\", fillcolor=");
 
-        if (s->operation == PARAMETER) {
+        if (s->operation == PARAMETER)
+        {
             fprintf(file, "lightgreen");
-        } else if (s->num_dependencies == 0) {
+        }
+        else if (s->num_dependencies == 0)
+        {
             fprintf(file, "lightblue");
-        } else {
+        }
+        else
+        {
             fprintf(file, "lightpink");
         }
 
         fprintf(file, "];\n");
 
-        for (int j = 0; j < s->num_dependencies; j++) {
+        for (int j = 0; j < s->num_dependencies; j++)
+        {
             fprintf(file, "    slot_%d -> slot_%d;\n", s->dependencies[j], i);
         }
     }
@@ -111,7 +149,8 @@ int increment_slot()
     return slot_counter++;
 }
 
-double generate_normal(double mean, double stddev) {
+double generate_normal(double mean, double stddev)
+{
     double u1 = (double)rand() / RAND_MAX;
     double u2 = (double)rand() / RAND_MAX;
 
@@ -119,7 +158,6 @@ double generate_normal(double mean, double stddev) {
 
     return z0 * stddev + mean;
 }
-
 
 int create_value_slot(int learnable_param, int *shape, int num_dimensions)
 {
@@ -155,13 +193,13 @@ int create_value_slot(int learnable_param, int *shape, int num_dimensions)
     slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
     slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
 
-    if(learnable_param){
+    if (learnable_param)
+    {
         for (int b = 0; b < slots[slot_counter].size; b++)
         {
             slots[slot_counter].value[b] = generate_normal(0.0, 1.0);
         }
     }
-
 
     slots[slot_counter].operation = PARAMETER;
     slots[slot_counter].num_dependencies = 0;
@@ -212,15 +250,14 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies, int 
     return increment_slot();
 }
 
-void set_slot_value_by_position(int slot, int* position, int num_dimensions, double value)
+void set_slot_value_by_position(int slot, int *position, int num_dimensions, double value)
 {
     int pos = 0;
-    for (int i = 0; i < num_dimensions-1; i++)
+    for (int i = 0; i < num_dimensions - 1; i++)
     {
-        pos += slots[slot].strides[i]*position[i];
+        pos += slots[slot].strides[i] * position[i];
     }
-    pos += position[num_dimensions-1];
-
+    pos += position[num_dimensions - 1];
 
     if (pos >= slots[slot].size)
     {
@@ -229,7 +266,6 @@ void set_slot_value_by_position(int slot, int* position, int num_dimensions, dou
     }
 
     slots[slot].value[pos] = value;
-    
 }
 
 void set_slot_value(int slot, int b_index, double v)
@@ -247,7 +283,7 @@ double get_slot_value(int slot, int index)
     return slots[slot].value[index];
 }
 
-double get_slot_value_by_position(int slot, int* position, int num_dimensions)
+double get_slot_value_by_position(int slot, int *position, int num_dimensions)
 {
     int pos = 0;
     for (int i = 0; i < num_dimensions - 1; i++)
@@ -264,7 +300,6 @@ double get_slot_value_by_position(int slot, int* position, int num_dimensions)
 
     return slots[slot].value[pos];
 }
-
 
 double _sum(double **list, int b, int length)
 {
@@ -542,7 +577,6 @@ void compute_grad(int slot)
             default:
                 break;
             }
-            
         }
     }
 }

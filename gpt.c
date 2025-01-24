@@ -4,7 +4,8 @@ extern int slot_counter;
 
 #define BATCH_SIZE 10
 
-typedef enum {
+typedef enum
+{
     LAYER_FEEDFORWARD,
     LAYER_ATTENTION
 } LayerType;
@@ -186,6 +187,7 @@ int *create_attention_layer(int *input_slots, int num_inputs, int d_model)
                     sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             context[i * d_model + k] = sum;
+            printf("Context: %d\n", context[i * d_model + k]);
         }
     }
 
@@ -229,7 +231,6 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-
 void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size)
 {
     int num_inputs = layer_sizes[0];
@@ -252,11 +253,18 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     {
         if (layer_types[i] == LAYER_ATTENTION)
         {
-            curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], 4); // Assuming d_model = 4
+            curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], layer_sizes[i]); // calling d_model layer_size is anti-naming but meh for now
         }
         else if (layer_types[i] == LAYER_FEEDFORWARD)
         {
-            curr_layer = create_feedforward_network(prev_layer, layer_sizes[i - 1], layer_sizes[i]);
+            if (layer_types[i - 1] == LAYER_ATTENTION)
+            {
+                curr_layer = create_feedforward_network(curr_layer, layer_sizes[i - 1] * layer_sizes[i - 2], layer_sizes[i]);
+            }
+            else
+            {
+                curr_layer = create_feedforward_network(prev_layer, layer_sizes[i - 1], layer_sizes[i]);
+            }
         }
         else
         {
@@ -282,6 +290,9 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     }
 
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
+
+    detect_orphans();
+    // exit(1);
 
     srand(time(NULL));
 
@@ -472,10 +483,10 @@ int main()
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size, 4, vocab_size};
-    LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
+    int layer_sizes[] = {input_size, 4, 4, vocab_size};
+    LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
 
-    int num_layers = 3;
+    int num_layers = 4;
 
     train(inputs, labels, num_samples, learning_rate, layer_sizes, layer_types, num_layers, index_to_char, vocab_size);
 

@@ -7,8 +7,9 @@
 #include <time.h>
 #include <string.h>
 
-
 #define MAX_SLOTS 10000000
+
+void detect_orphans();
 
 typedef enum
 {
@@ -31,22 +32,20 @@ typedef enum
 
 typedef struct
 {
-    double *value;          
-    double *gradient;       
-    int *shape;             
-    int *strides;           
+    double *value;
+    double *gradient;
+    int *shape;
+    int *strides;
     int num_dimensions;
-    int size;     
-    OperationType operation; 
-    int *dependencies;      
-    int num_dependencies;   
-    int learnable_param;    
+    int size;
+    OperationType operation;
+    int *dependencies;
+    int num_dependencies;
+    int learnable_param;
     int visited;
 } Slot;
 
-
 Slot slots[MAX_SLOTS];
-
 
 int create_value_slot(int learnable_param, int *shape, int num_dimensions);
 int create_operation_slot(OperationType op, int *dep, int num_dependencies, int *shape, int num_dimensions);
@@ -59,8 +58,8 @@ double *compute_graph(int slot);
 
 int zerograd();
 
-void set_slot_value_by_position(int slot, int* position, int num_dimensions, double value);
-double get_slot_value_by_position(int slot, int* position, int num_dimensions);
+void set_slot_value_by_position(int slot, int *position, int num_dimensions, double value);
+double get_slot_value_by_position(int slot, int *position, int num_dimensions);
 
 void export_graph_to_dot(const char *filename);
 
