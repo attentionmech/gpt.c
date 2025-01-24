@@ -51,8 +51,8 @@ Slot slots[MAX_SLOTS];
 int create_value_slot(int learnable_param, int *shape, int num_dimensions);
 int create_operation_slot(OperationType op, int *dep, int num_dependencies, int *shape, int num_dimensions);
 
-// double get_slot_value(int slot, int b_index);
-// void set_slot_value(int slot, int b_index, double v);
+double get_slot_value(int slot, int b_index);
+void set_slot_value(int slot, int b_index, double v);
 
 void compute_grad(int slot);
 double *compute_graph(int slot);

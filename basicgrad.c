@@ -111,6 +111,16 @@ int increment_slot()
     return slot_counter++;
 }
 
+double generate_normal(double mean, double stddev) {
+    double u1 = (double)rand() / RAND_MAX;
+    double u2 = (double)rand() / RAND_MAX;
+
+    double z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+
+    return z0 * stddev + mean;
+}
+
+
 int create_value_slot(int learnable_param, int *shape, int num_dimensions)
 {
     slots[slot_counter].num_dimensions = num_dimensions;
@@ -144,6 +154,14 @@ int create_value_slot(int learnable_param, int *shape, int num_dimensions)
 
     slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
     slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
+
+    if(learnable_param){
+        for (int b = 0; b < slots[slot_counter].size; b++)
+        {
+            slots[slot_counter].value[b] = generate_normal(0.0, 1.0);
+        }
+    }
+
 
     slots[slot_counter].operation = PARAMETER;
     slots[slot_counter].num_dependencies = 0;

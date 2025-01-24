@@ -230,7 +230,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     for (int i = 0; i < num_layers; i++) {
         if (layer_sizes[i] == -1) {
-            curr_layer = create_attention_layer(prev_layer, layer_sizes[i-1], 2);
+            curr_layer = create_attention_layer(prev_layer, layer_sizes[i-1], 4);
         } else {
             int sizes[] = {layer_sizes[i]};
             curr_layer = create_feedforward_network(sizes, 1);
@@ -251,11 +251,11 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
 
-    export_graph_to_dot("test.dot");
+    // export_graph_to_dot("test.dot");
 
     srand(time(NULL));
 
-    int EPOCHS = 1;
+    int EPOCHS = 1000;
 
     for (int epoch = 0; epoch < EPOCHS; epoch++)
     {
@@ -311,7 +311,8 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
                     for (int b = 0; b < slots[j].size; b++)
                     {
-                        set_slot_value_by_position(j, (int[]){b,0},2, get_slot_value_by_position(j, (int[]){b,0},2) - learning_rate * grad_sum / slots[j].size);
+                        set_slot_value(j, b, get_slot_value(j,b) - learning_rate * grad_sum / slots[j].size);
+                    
                     }
                 }
             }
@@ -441,8 +442,8 @@ int main()
         labels[i] = char_to_index[next_char];
     }
 
-    double learning_rate = 0.01;
-    int layer_sizes[] = {input_size, 2, -1 , 2, vocab_size};
+    double learning_rate = 0.1;
+    int layer_sizes[] = {input_size, 4 , -1, 4, vocab_size};
 
     int num_layers = 5;
 
