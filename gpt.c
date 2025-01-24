@@ -27,60 +27,6 @@ double he_init(int fan_in)
     return std * sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
 }
 
-int *create_feedforward_network(int *layer_sizes, int num_layers)
-{
-    int *prev_layer_slots = NULL;
-    int *curr_layer_slots = NULL;
-
-    for (int layer = 0; layer < num_layers; layer++)
-    {
-        curr_layer_slots = malloc(layer_sizes[layer] * sizeof(int));
-
-        if (layer == 0)
-        {
-            for (int i = 0; i < layer_sizes[layer]; i++)
-            {
-                curr_layer_slots[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
-            }
-        }
-        else
-        {
-            for (int neuron = 0; neuron < layer_sizes[layer]; neuron++)
-            {
-                int sum = -1;
-                for (int prev = 0; prev < layer_sizes[layer - 1]; prev++)
-                {
-                    int weight = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
-                    for (int b = 0; b < slots[weight].size; b++)
-                    {
-                        double weight_init = he_init(layer_sizes[layer - 1]);
-                        set_slot_value_by_position(weight, (int[]){b,0},2, weight_init);
-                    }
-                    int mul = create_operation_slot(MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2, (int[]){BATCH_SIZE, 1}, 2);
-
-                    if (sum == -1)
-                    {
-                        sum = mul;
-                    }
-                    else
-                    {
-                        sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
-                    }
-                }
-
-                int bias = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
-                int biased = create_operation_slot(ADD, wrap_in_array(sum, bias), 2, (int[]){BATCH_SIZE, 1}, 2);
-                curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
-            }
-        }
-
-        free(prev_layer_slots);
-        prev_layer_slots = curr_layer_slots;
-    }
-
-    return curr_layer_slots;
-}
-
 int *create_softmax_layer(int *input_slots, int num_outputs)
 {
 
@@ -123,18 +69,21 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
     return neg_cross_entropy;
 }
 
-int* create_attention_layer(int* input_slots, int num_inputs, int d_model) {
+int *create_attention_layer(int *input_slots, int num_inputs, int d_model)
+{
     int Q_weights[d_model * num_inputs];
     int K_weights[d_model * num_inputs];
     int V_weights[d_model * num_inputs];
 
-    for (int i = 0; i < d_model * num_inputs; i++) {
+    for (int i = 0; i < d_model * num_inputs; i++)
+    {
         Q_weights[i] = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
         K_weights[i] = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
         V_weights[i] = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
 
         double weight_init = he_init(num_inputs);
-        for (int b = 0; b < BATCH_SIZE; b++) {
+        for (int b = 0; b < BATCH_SIZE; b++)
+        {
             set_slot_value_by_position(Q_weights[i], (int[]){b, 0}, 2, weight_init);
             set_slot_value_by_position(K_weights[i], (int[]){b, 0}, 2, weight_init);
             set_slot_value_by_position(V_weights[i], (int[]){b, 0}, 2, weight_init);
@@ -145,22 +94,31 @@ int* create_attention_layer(int* input_slots, int num_inputs, int d_model) {
     int K[num_inputs * d_model];
     int V[num_inputs * d_model];
 
-    for (int i = 0; i < num_inputs; i++) {
-        for (int j = 0; j < d_model; j++) {
+    for (int i = 0; i < num_inputs; i++)
+    {
+        for (int j = 0; j < d_model; j++)
+        {
             int q_sum = -1, k_sum = -1, v_sum = -1;
-            for (int k = 0; k < num_inputs; k++) {
+            for (int k = 0; k < num_inputs; k++)
+            {
                 int q_mul = create_operation_slot(MULTIPLY, wrap_in_array(input_slots[k], Q_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
                 int k_mul = create_operation_slot(MULTIPLY, wrap_in_array(input_slots[k], K_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
                 int v_mul = create_operation_slot(MULTIPLY, wrap_in_array(input_slots[k], V_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
 
-                if (q_sum == -1) q_sum = q_mul;
-                else q_sum = create_operation_slot(ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                if (q_sum == -1)
+                    q_sum = q_mul;
+                else
+                    q_sum = create_operation_slot(ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
 
-                if (k_sum == -1) k_sum = k_mul;
-                else k_sum = create_operation_slot(ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                if (k_sum == -1)
+                    k_sum = k_mul;
+                else
+                    k_sum = create_operation_slot(ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
 
-                if (v_sum == -1) v_sum = v_mul;
-                else v_sum = create_operation_slot(ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                if (v_sum == -1)
+                    v_sum = v_mul;
+                else
+                    v_sum = create_operation_slot(ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             Q[i * d_model + j] = q_sum;
             K[i * d_model + j] = k_sum;
@@ -169,17 +127,22 @@ int* create_attention_layer(int* input_slots, int num_inputs, int d_model) {
     }
 
     int seq_length = num_inputs;
-    int* attention_scores = malloc(seq_length * seq_length * sizeof(int));
+    int *attention_scores = malloc(seq_length * seq_length * sizeof(int));
 
-    for (int i = 0; i < seq_length; i++) {
-        for (int j = 0; j < seq_length; j++) {
+    for (int i = 0; i < seq_length; i++)
+    {
+        for (int j = 0; j < seq_length; j++)
+        {
             int sum = -1;
-            for (int k = 0; k < d_model; k++) {
+            for (int k = 0; k < d_model; k++)
+            {
                 int q_idx = i * d_model + k;
                 int k_idx = j * d_model + k;
                 int mul = create_operation_slot(MULTIPLY, wrap_in_array(Q[q_idx], K[k_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
-                if (sum == -1) sum = mul;
-                else sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                if (sum == -1)
+                    sum = mul;
+                else
+                    sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             double scale = sqrt(d_model);
             int scale_slot = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
@@ -191,24 +154,31 @@ int* create_attention_layer(int* input_slots, int num_inputs, int d_model) {
         }
     }
 
-    int* attention_weights = malloc(seq_length * seq_length * sizeof(int));
-    for (int i = 0; i < seq_length; i++) {
-        int* row_scores = &attention_scores[i * seq_length];
-        int* softmax_row = create_softmax_layer(row_scores, seq_length);
-        for (int j = 0; j < seq_length; j++) {
+    int *attention_weights = malloc(seq_length * seq_length * sizeof(int));
+    for (int i = 0; i < seq_length; i++)
+    {
+        int *row_scores = &attention_scores[i * seq_length];
+        int *softmax_row = create_softmax_layer(row_scores, seq_length);
+        for (int j = 0; j < seq_length; j++)
+        {
             attention_weights[i * seq_length + j] = softmax_row[j];
         }
     }
 
-    int* context = malloc(seq_length * d_model * sizeof(int));
-    for (int i = 0; i < seq_length; i++) {
-        for (int k = 0; k < d_model; k++) {
+    int *context = malloc(seq_length * d_model * sizeof(int));
+    for (int i = 0; i < seq_length; i++)
+    {
+        for (int k = 0; k < d_model; k++)
+        {
             int sum = -1;
-            for (int j = 0; j < seq_length; j++) {
+            for (int j = 0; j < seq_length; j++)
+            {
                 int v_idx = j * d_model + k;
                 int mul = create_operation_slot(MULTIPLY, wrap_in_array(attention_weights[i * seq_length + j], V[v_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
-                if (sum == -1) sum = mul;
-                else sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                if (sum == -1)
+                    sum = mul;
+                else
+                    sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             context[i * d_model + k] = sum;
         }
@@ -219,26 +189,74 @@ int* create_attention_layer(int* input_slots, int num_inputs, int d_model) {
     return context;
 }
 
+int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int curr_layer_size)
+{
+    int *curr_layer_slots = malloc(curr_layer_size * sizeof(int));
+
+    for (int neuron = 0; neuron < curr_layer_size; neuron++)
+    {
+        int sum = -1;
+        for (int prev = 0; prev < prev_layer_size; prev++)
+        {
+            int weight = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
+            for (int b = 0; b < slots[weight].size; b++)
+            {
+                double weight_init = he_init(prev_layer_size);
+                set_slot_value_by_position(weight, (int[]){b, 0}, 2, weight_init);
+            }
+            int mul = create_operation_slot(MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2, (int[]){BATCH_SIZE, 1}, 2);
+
+            if (sum == -1)
+            {
+                sum = mul;
+            }
+            else
+            {
+                sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+            }
+        }
+
+        int bias = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
+        int biased = create_operation_slot(ADD, wrap_in_array(sum, bias), 2, (int[]){BATCH_SIZE, 1}, 2);
+        curr_layer_slots[neuron] = create_operation_slot(RELU, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
+    }
+
+    return curr_layer_slots;
+}
+
 void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_layers, int *index_to_char, int vocab_size)
 {
 
     int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
 
-    int* prev_layer = NULL;
-    int* curr_layer = NULL;
+    int *prev_layer = NULL;
+    int *curr_layer = NULL;
 
-    for (int i = 0; i < num_layers; i++) {
-        if (layer_sizes[i] == -1) {
-            curr_layer = create_attention_layer(prev_layer, layer_sizes[i-1], 4);
-        } else {
-            int sizes[] = {layer_sizes[i]};
-            curr_layer = create_feedforward_network(sizes, 1);
+    prev_layer = malloc(num_inputs * sizeof(int));
+    for (int i = 0; i < num_inputs; i++)
+    {
+        prev_layer[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
+        for (int b = 0; b < BATCH_SIZE; b++)
+        {
+            set_slot_value_by_position(prev_layer[i], (int[]){b, 0}, 2, inputs[b][i]);
         }
-        if (prev_layer) free(prev_layer);
-        prev_layer = curr_layer;
     }
 
+    for (int i = 1; i < num_layers; i++)
+    {
+        if (layer_sizes[i] == -1)
+        {
+            curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], 4);
+        }
+        else
+        {
+            curr_layer = create_feedforward_network(prev_layer, layer_sizes[i - 1], layer_sizes[i]);
+        }
+        if (prev_layer)
+            free(prev_layer);
+        prev_layer = curr_layer;
+    }
 
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
@@ -247,11 +265,13 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     for (int i = 0; i < num_outputs; i++)
     {
         target_slots[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
+        for (int b = 0; b < BATCH_SIZE; b++)
+        {
+            set_slot_value_by_position(target_slots[i], (int[]){b, 0}, 2, labels[b] == i ? 1.0 : 0.0);
+        }
     }
 
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
-
-    // export_graph_to_dot("test.dot");
 
     srand(time(NULL));
 
@@ -270,7 +290,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
-                    set_slot_value_by_position(k, (int[]){b,0},2, inputs[i + b][k]);
+                    set_slot_value_by_position(k, (int[]){b, 0}, 2, inputs[i + b][k]);
                 }
             }
 
@@ -280,11 +300,11 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 {
                     if (l == labels[i + b])
                     {
-                        set_slot_value_by_position(target_slots[l - 1], (int[]){b,0},2, 1);
+                        set_slot_value_by_position(target_slots[l - 1], (int[]){b, 0}, 2, 1);
                     }
                     else
                     {
-                        set_slot_value_by_position(target_slots[l - 1], (int[]){b,0},2, 0);
+                        set_slot_value_by_position(target_slots[l - 1], (int[]){b, 0}, 2, 0);
                     }
                 }
             }
@@ -293,7 +313,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                total_loss += get_slot_value_by_position(loss_slot, (int[]){b,0},2);
+                total_loss += get_slot_value_by_position(loss_slot, (int[]){b, 0}, 2);
                 slots[loss_slot].gradient[b] = 1.0;
             }
 
@@ -311,8 +331,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
                     for (int b = 0; b < slots[j].size; b++)
                     {
-                        set_slot_value(j, b, get_slot_value(j,b) - learning_rate * grad_sum / slots[j].size);
-                    
+                        set_slot_value(j, b, get_slot_value(j, b) - learning_rate * grad_sum / slots[j].size);
                     }
                 }
             }
@@ -327,7 +346,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 for (int k = 0; k < (seq_len - 1); k++)
                 {
-                    set_slot_value_by_position(k, (int[]){0,0},2, inputs[0][k + 1]);
+                    set_slot_value_by_position(k, (int[]){0, 0}, 2, inputs[0][k + 1]);
                 }
                 inputs[0][(seq_len - 1)] = max_index;
             }
@@ -340,7 +359,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
             for (int j = 0; j < num_outputs; j++)
             {
-                double raw_value = get_slot_value_by_position(softmax_slots[j], (int[]){0,0},2);
+                double raw_value = get_slot_value_by_position(softmax_slots[j], (int[]){0, 0}, 2);
                 softmax_values[j] = exp(raw_value / temperature);
                 exp_sum += softmax_values[j];
             }
@@ -416,9 +435,9 @@ int main()
     int input_size = SEQUENCE_LENGTH;
     int num_samples = data_length - SEQUENCE_LENGTH;
 
-    if (num_samples > 10)
+    if (num_samples > 10000)
     {
-        num_samples = 10;
+        num_samples = 10000;
     }
 
     int labels[num_samples];
@@ -442,10 +461,10 @@ int main()
         labels[i] = char_to_index[next_char];
     }
 
-    double learning_rate = 0.1;
-    int layer_sizes[] = {input_size, 4 , -1, 4, vocab_size};
+    double learning_rate = 0.01;
+    int layer_sizes[] = {input_size, 4, 4, vocab_size};
 
-    int num_layers = 5;
+    int num_layers = 4;
 
     train(inputs, labels, num_samples, learning_rate, layer_sizes, num_layers, index_to_char, vocab_size);
 
