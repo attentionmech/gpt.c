@@ -24,7 +24,6 @@ gpt implemented in C [ongoing dev]
 - [ ] Implement Layer Normalization  
 - [ ] Stack Transformer Blocks  
 - [ ] Build a tokenization system (BPE)    
-- [ ] Design weight initialization and updates  
 - [ ] Implement text generation (Greedy Decoding)  
 - [ ] Add Beam Search for better inference  
 - [ ] Add performance metrics (perplexity, loss tracking)
@@ -37,3 +36,4 @@ Current State:
 - ~~MNIST Test failed because of memory leaks.~~
 - ~~Slow network convergence for large MLP~~
 - ~~Network facing vanishing gradient issue~~
+- vanishing gradients after adding attention; 
