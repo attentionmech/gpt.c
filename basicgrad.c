@@ -207,7 +207,7 @@ int create_operation_slot(OperationType op, int *dep, int num_dependencies, int 
     slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
     slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
 
-    slots[slot_counter].learnable_param = 0;
+    slots[slot_counter].learnable_param = 1;
 
     return increment_slot();
 }
