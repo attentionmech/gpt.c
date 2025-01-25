@@ -37,3 +37,8 @@ Current State:
 - ~~Slow network convergence for large MLP~~
 - ~~Network facing vanishing gradient issue~~
 - vanishing gradients after adding attention; 
+
+
+How to Run:
+
+`gcc gpt.c; ./a.out`
