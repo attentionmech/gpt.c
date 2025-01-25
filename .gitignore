@@ -6,3 +6,4 @@ main
 gpt.dSYM/
 a.out.*
 gpt
+.DS_Store

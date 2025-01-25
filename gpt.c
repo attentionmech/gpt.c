@@ -822,7 +822,7 @@ int *create_attention_layer(int *input_slots, int num_inputs, int d_model)
                     sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             context[i * d_model + k] = sum;
-            printf("Context: %d\n", context[i * d_model + k]);
+            // printf("Context: %d\n", context[i * d_model + k]);
         }
     }
 
