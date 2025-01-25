@@ -1,6 +1,6 @@
 # gpt.c
 
-gpt implemented in C [ongoing dev]
+Implementing decoder-only GPT style transformer in C
 
 ![demo](assets/demo.gif)
 
