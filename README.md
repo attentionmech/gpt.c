@@ -40,7 +40,7 @@ Current State:
 - ~~MNIST Test failed because of memory leaks.~~
 - ~~Slow network convergence for large MLP~~
 - ~~Network facing vanishing gradient issue~~
-- vanishing gradients after adding attention; 
+- ~~vanishing gradients after adding attention;~~
 
 
 How to Run:
