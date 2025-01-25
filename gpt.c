@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -8,6 +9,17 @@
 #define BATCH_SIZE 10
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 #define MAX_SLOTS 10000000
+#define MAX_FILE_SIZE 10000
+
+// bpe related
+#define MAX_VOCAB_SIZE 10000
+#define MAX_MERGES 100
+
+typedef struct
+{
+    int pair[2];
+    int merged;
+} BPEMerge;
 
 typedef enum
 {
@@ -53,6 +65,130 @@ Slot slots[MAX_SLOTS];
 int slot_counter = 0;
 double **dependency_buffer;
 bool is_referenced[MAX_SLOTS] = {false}; // orphan detection, optional
+
+void reverse_merge(int *tokens, int *num_tokens, BPEMerge *merge, int data_length)
+{
+    int new_tokens[data_length * 2];
+    int new_tokens_index = 0;
+
+    for (int i = 0; i < *num_tokens; i++)
+    {
+        if (tokens[i] == merge->merged)
+        {
+            new_tokens[new_tokens_index++] = merge->pair[0];
+            new_tokens[new_tokens_index++] = merge->pair[1];
+        }
+        else
+        {
+            new_tokens[new_tokens_index++] = tokens[i];
+        }
+    }
+
+    for (int i = 0; i < new_tokens_index; i++)
+    {
+        tokens[i] = new_tokens[i];
+    }
+    *num_tokens = new_tokens_index;
+}
+
+void recover_original_tokens(int *tokens, int *num_tokens, BPEMerge *merges, int num_merges, int data_length)
+{
+    for (int i = num_merges - 1; i >= 0; i--)
+    {
+        reverse_merge(tokens, num_tokens, &merges[i], data_length);
+    }
+}
+
+void find_most_frequent_pair(int *numbers, int num_numbers, int *pair)
+{
+    int max_count = 0;
+    int most_frequent_pair[2] = {-1, -1};
+
+    for (int i = 0; i < num_numbers - 1; i++)
+    {
+        int current_pair[2] = {numbers[i], numbers[i + 1]};
+        int count = 0;
+
+        for (int j = 0; j < num_numbers - 1; j++)
+        {
+            if (numbers[j] == current_pair[0] && numbers[j + 1] == current_pair[1])
+            {
+                count++;
+            }
+        }
+
+        if (count > max_count)
+        {
+            max_count = count;
+            most_frequent_pair[0] = current_pair[0];
+            most_frequent_pair[1] = current_pair[1];
+        }
+    }
+
+    pair[0] = most_frequent_pair[0];
+    pair[1] = most_frequent_pair[1];
+}
+
+void merge_pair(int *numbers, int *num_numbers, int *pair, int merged_token, int data_length)
+{
+    int new_numbers[data_length * 2];
+    int new_numbers_index = 0;
+
+    for (int i = 0; i < *num_numbers;)
+    {
+        if (i < *num_numbers - 1 &&
+            numbers[i] == pair[0] &&
+            numbers[i + 1] == pair[1])
+        {
+            new_numbers[new_numbers_index++] = merged_token;
+            i += 2;
+        }
+        else
+        {
+            new_numbers[new_numbers_index++] = numbers[i++];
+        }
+    }
+
+    for (int i = 0; i < new_numbers_index; i++)
+    {
+        numbers[i] = new_numbers[i];
+    }
+    *num_numbers = new_numbers_index;
+}
+
+void bpe_tokenize(int *numbers, int *num_numbers, BPEMerge *merges, int num_merges, int data_length)
+{
+    for (int i = 0; i < num_merges; i++)
+    {
+        int pair[2] = {merges[i].pair[0], merges[i].pair[1]};
+        merge_pair(numbers, num_numbers, pair, merges[i].merged, data_length);
+    }
+}
+
+void learn_bpe_merges(int *numbers, int *num_numbers, BPEMerge *merges, int *num_merges, int data_length)
+{
+    int next_token = 256;
+
+    for (int i = 0; i < MAX_MERGES; i++)
+    {
+        printf("BPE Merge %d\n", i);
+        int pair[2] = {-1, -1};
+        find_most_frequent_pair(numbers, *num_numbers, pair);
+
+        if (pair[0] == -1 || pair[1] == -1)
+        {
+            break;
+        }
+
+        merges[*num_merges].pair[0] = pair[0];
+        merges[*num_merges].pair[1] = pair[1];
+        merges[*num_merges].merged = next_token;
+        (*num_merges)++;
+        next_token++;
+
+        merge_pair(numbers, num_numbers, pair, merges[*num_merges - 1].merged, data_length);
+    }
+}
 
 const char *get_operation_name(OperationType op)
 {
@@ -866,7 +1002,7 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size)
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges)
 {
     int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
@@ -937,7 +1073,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     {
         double total_loss = 0.0;
 
-        for (int i = 0; i < num_samples; i += BATCH_SIZE)
+        for (int i = 0; i + BATCH_SIZE < num_samples; i += BATCH_SIZE)
         {
 
             zerograd();
@@ -1038,8 +1174,19 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                     break;
                 }
             }
+            int num_tokens = 1;
+            int temp[MAX_MERGES] = {0};
+            temp[0] = index_to_char[max_index];
+            recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
+            assert(num_tokens < MAX_MERGES);
 
-            printf("%c", (char)index_to_char[max_index]);
+            // alternatively I can pass all the characters together also,
+            //  but then that would need a larger allocation of array
+            //  and this is also equivalent only
+            for (int x = 0; x < num_tokens; x++)
+            {
+                printf("%c", (char)temp[x]);
+            }
         }
         printf("\n");
 
@@ -1049,7 +1196,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
 int main()
 {
-
     FILE *file = fopen("dataset/tinystories.txt", "r");
     if (file == NULL)
     {
@@ -1059,6 +1205,9 @@ int main()
 
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
+
+    file_size = file_size > MAX_FILE_SIZE ? MAX_FILE_SIZE : file_size;
+
     fseek(file, 0, SEEK_SET);
 
     char *data = (char *)malloc(file_size + 1);
@@ -1066,30 +1215,41 @@ int main()
     data[data_length] = '\0';
     fclose(file);
 
-    int MAX_CHARACTERS = 256;
-    int SEQUENCE_LENGTH = 4;
-
-    int char_to_index[256];
-    int index_to_char[MAX_CHARACTERS];
-    for (int i = 0; i < 256; i++)
+    int *numbers = (int *)malloc(data_length * 2 * sizeof(int));
+    int num_numbers = 0;
+    for (int i = 0; i < data_length; i++)
     {
-        char_to_index[i] = -1;
+        numbers[num_numbers++] = (unsigned char)data[i];
+    }
+
+    BPEMerge merges[MAX_MERGES];
+    int num_merges = 0;
+    learn_bpe_merges(numbers, &num_numbers, merges, &num_merges, data_length);
+
+    bpe_tokenize(numbers, &num_numbers, merges, num_merges, data_length);
+
+    int token_to_index[MAX_VOCAB_SIZE];
+    int index_to_token[MAX_VOCAB_SIZE];
+    for (int i = 0; i < MAX_VOCAB_SIZE; i++)
+    {
+        token_to_index[i] = -1;
     }
 
     int vocab_size = 0;
-    for (int i = 0; i < data_length; i++)
+    for (int i = 0; i < num_numbers; i++)
     {
-        unsigned char c = data[i];
-        if (char_to_index[c] == -1)
+        if (token_to_index[numbers[i]] == -1)
         {
-            char_to_index[c] = vocab_size;
-            index_to_char[vocab_size] = c;
+            token_to_index[numbers[i]] = vocab_size;
+            index_to_token[vocab_size] = numbers[i];
             vocab_size++;
         }
     }
 
+    int SEQUENCE_LENGTH = 4;
+
     int input_size = SEQUENCE_LENGTH;
-    int num_samples = data_length - SEQUENCE_LENGTH;
+    int num_samples = num_numbers - SEQUENCE_LENGTH;
 
     if (num_samples > 10000)
     {
@@ -1097,7 +1257,6 @@ int main()
     }
 
     int labels[num_samples];
-
     double **inputs = (double **)malloc(num_samples * sizeof(double *));
     for (int i = 0; i < num_samples; i++)
     {
@@ -1108,22 +1267,24 @@ int main()
     {
         for (int j = 0; j < input_size; j++)
         {
-            unsigned char c = data[i + j];
-
-            inputs[i][j] = char_to_index[c];
+            inputs[i][j] = (double)token_to_index[numbers[i + j]];
         }
-
-        unsigned char next_char = data[i + SEQUENCE_LENGTH];
-        labels[i] = char_to_index[next_char];
+        labels[i] = (double)token_to_index[numbers[i + input_size]];
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size, 4, 4, vocab_size};
-    LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
+    int layer_sizes[] = {input_size, 4, 4, 4, vocab_size};
+    LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
+    int num_layers = 5;
 
-    int num_layers = 4;
+    train(inputs, labels, num_samples, learning_rate, layer_sizes, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges);
 
-    train(inputs, labels, num_samples, learning_rate, layer_sizes, layer_types, num_layers, index_to_char, vocab_size);
+    for (int i = 0; i < num_samples; i++)
+    {
+        free(inputs[i]);
+    }
+    free(inputs);
+    free(data);
 
     return 0;
 }
