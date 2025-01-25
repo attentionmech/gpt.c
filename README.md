@@ -2,6 +2,10 @@
 
 gpt implemented in C [ongoing dev]
 
+![demo](assets/demo.gif)
+
+
+
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
 - [X] Develop backpropagation 
