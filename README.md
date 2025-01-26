@@ -1,6 +1,10 @@
 # gpt.c
 
-gpt implemented in C [ongoing dev]
+Implementing decoder-only GPT style transformer in C
+
+![demo](assets/demo.gif)
+
+
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
@@ -21,6 +25,7 @@ gpt implemented in C [ongoing dev]
 - [X] Implement Self-Attention Mechanism
 - [X] Build a tokenization system (BPE)
 - [X] Stack Transformer blocks (works by repetition of layers)
+- [ ] learnable embeddings
 - [ ] Build Positional Encoding  
 - [ ] Develop Multi-Head Attention  
 - [ ] Implement Layer Normalization  
@@ -36,7 +41,7 @@ Current State:
 - ~~MNIST Test failed because of memory leaks.~~
 - ~~Slow network convergence for large MLP~~
 - ~~Network facing vanishing gradient issue~~
-- vanishing gradients after adding attention; 
+- ~~vanishing gradients after adding attention;~~
 
 
 How to Run:
