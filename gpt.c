@@ -846,6 +846,157 @@ int create_cross_entropy_loss(int *target_slots, int *softmax_slots, int num_out
     return neg_cross_entropy;
 }
 
+int *create_multihead_attention_layer(int *input_slots, int num_inputs, int d_model, int num_heads)
+{
+    int head_dim = d_model / num_heads;
+    if (d_model % num_heads != 0)
+    {
+        printf("Error: d_model must be divisible by num_heads.\n");
+        return NULL;
+    }
+
+    int **Q_weights = malloc(num_heads * sizeof(int *));
+    int **K_weights = malloc(num_heads * sizeof(int *));
+    int **V_weights = malloc(num_heads * sizeof(int *));
+    for (int h = 0; h < num_heads; h++)
+    {
+        Q_weights[h] = malloc(head_dim * num_inputs * sizeof(int));
+        K_weights[h] = malloc(head_dim * num_inputs * sizeof(int));
+        V_weights[h] = malloc(head_dim * num_inputs * sizeof(int));
+
+        for (int i = 0; i < head_dim * num_inputs; i++)
+        {
+            Q_weights[h][i] = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
+            K_weights[h][i] = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
+            V_weights[h][i] = create_value_slot(1, (int[]){BATCH_SIZE, 1}, 2);
+
+            double weight_init = he_init(num_inputs);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                set_slot_value_by_position(Q_weights[h][i], (int[]){b, 0}, 2, weight_init);
+                set_slot_value_by_position(K_weights[h][i], (int[]){b, 0}, 2, weight_init);
+                set_slot_value_by_position(V_weights[h][i], (int[]){b, 0}, 2, weight_init);
+            }
+        }
+    }
+
+    int **Q = malloc(num_heads * sizeof(int *));
+    int **K = malloc(num_heads * sizeof(int *));
+    int **V = malloc(num_heads * sizeof(int *));
+    for (int h = 0; h < num_heads; h++)
+    {
+        Q[h] = malloc(num_inputs * head_dim * sizeof(int));
+        K[h] = malloc(num_inputs * head_dim * sizeof(int));
+        V[h] = malloc(num_inputs * head_dim * sizeof(int));
+
+        for (int i = 0; i < num_inputs; i++)
+        {
+            for (int j = 0; j < head_dim; j++)
+            {
+                int q_sum = -1, k_sum = -1, v_sum = -1;
+                for (int k = 0; k < num_inputs; k++)
+                {
+                    int q_mul = create_operation_slot(MULTIPLY, wrap_in_array(input_slots[k], Q_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int k_mul = create_operation_slot(MULTIPLY, wrap_in_array(input_slots[k], K_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int v_mul = create_operation_slot(MULTIPLY, wrap_in_array(input_slots[k], V_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+
+                    if (q_sum == -1)
+                        q_sum = q_mul;
+                    else
+                        q_sum = create_operation_slot(ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+
+                    if (k_sum == -1)
+                        k_sum = k_mul;
+                    else
+                        k_sum = create_operation_slot(ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+
+                    if (v_sum == -1)
+                        v_sum = v_mul;
+                    else
+                        v_sum = create_operation_slot(ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                }
+                Q[h][i * head_dim + j] = q_sum;
+                K[h][i * head_dim + j] = k_sum;
+                V[h][i * head_dim + j] = v_sum;
+            }
+        }
+    }
+
+    int seq_length = num_inputs;
+    int *context = malloc(seq_length * d_model * sizeof(int));
+
+    for (int h = 0; h < num_heads; h++)
+    {
+        int *attention_scores = malloc(seq_length * seq_length * sizeof(int));
+        for (int i = 0; i < seq_length; i++)
+        {
+            for (int j = 0; j < seq_length; j++)
+            {
+                int sum = -1;
+                for (int k = 0; k < head_dim; k++)
+                {
+                    int q_idx = i * head_dim + k;
+                    int k_idx = j * head_dim + k;
+                    int mul = create_operation_slot(MULTIPLY, wrap_in_array(Q[h][q_idx], K[h][k_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    if (sum == -1)
+                        sum = mul;
+                    else
+                        sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                }
+                double scale = sqrt(head_dim);
+                int scale_slot = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
+                for (int b = 0; b < BATCH_SIZE; b++)
+                    set_slot_value_by_position(scale_slot, (int[]){b, 0}, 2, scale);
+
+                attention_scores[i * seq_length + j] =
+                    create_operation_slot(DIV, wrap_in_array(sum, scale_slot), 2, (int[]){BATCH_SIZE, 1}, 2);
+            }
+        }
+
+        int *attention_weights = malloc(seq_length * seq_length * sizeof(int));
+        for (int i = 0; i < seq_length; i++)
+        {
+            int *row_scores = &attention_scores[i * seq_length];
+            int *softmax_row = create_softmax_layer(row_scores, seq_length);
+            for (int j = 0; j < seq_length; j++)
+            {
+                attention_weights[i * seq_length + j] = softmax_row[j];
+            }
+        }
+
+        for (int i = 0; i < seq_length; i++)
+        {
+            for (int k = 0; k < head_dim; k++)
+            {
+                int sum = -1;
+                for (int j = 0; j < seq_length; j++)
+                {
+                    int v_idx = j * head_dim + k;
+                    int mul = create_operation_slot(MULTIPLY, wrap_in_array(attention_weights[i * seq_length + j], V[h][v_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    if (sum == -1)
+                        sum = mul;
+                    else
+                        sum = create_operation_slot(ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                }
+                context[i * d_model + h * head_dim + k] = sum;
+            }
+        }
+
+        free(attention_scores);
+        free(attention_weights);
+    }
+
+    free(Q_weights);
+    free(K_weights);
+    free(V_weights);
+    free(Q);
+    free(K);
+    free(V);
+
+    return context;
+}
+
+
 int *create_attention_layer(int *input_slots, int num_inputs, int d_model)
 {
     int Q_weights[d_model * num_inputs];
@@ -1002,7 +1153,7 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges)
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_heads, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges)
 {
     int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
@@ -1024,7 +1175,8 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     {
         if (layer_types[i] == LAYER_ATTENTION)
         {
-            curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], layer_sizes[i]); // calling d_model layer_size is anti-naming but meh for now
+            // curr_layer = create_attention_layer(prev_layer, layer_sizes[i - 1], layer_sizes[i]); // calling d_model layer_size is anti-naming but meh for now
+            curr_layer = create_multihead_attention_layer(prev_layer, layer_sizes[i - 1], layer_sizes[i], num_heads);
         }
         else if (layer_types[i] == LAYER_FEEDFORWARD)
         {
@@ -1274,10 +1426,11 @@ int main()
 
     double learning_rate = 0.01;
     int layer_sizes[] = {input_size, 4, 4, 4, vocab_size};
+    int num_heads = 2;
     LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
     int num_layers = 5;
 
-    train(inputs, labels, num_samples, learning_rate, layer_sizes, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges);
+    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges);
 
     for (int i = 0; i < num_samples; i++)
     {
