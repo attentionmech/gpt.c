@@ -996,7 +996,6 @@ int *create_multihead_attention_layer(int *input_slots, int num_inputs, int d_mo
     return context;
 }
 
-
 int *create_attention_layer(int *input_slots, int num_inputs, int d_model)
 {
     int Q_weights[d_model * num_inputs];
@@ -1161,13 +1160,17 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     int *prev_layer = NULL;
     int *curr_layer = NULL;
 
-    prev_layer = malloc(num_inputs * sizeof(int));
+    prev_layer = malloc(num_inputs * vocab_size * sizeof(int));
     for (int i = 0; i < num_inputs; i++)
     {
-        prev_layer[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
-        for (int b = 0; b < BATCH_SIZE; b++)
+        for (int j = 0; j < vocab_size; j++)
         {
-            set_slot_value_by_position(prev_layer[i], (int[]){b, 0}, 2, inputs[b][i]);
+            int slot_index = i * vocab_size + j;
+            prev_layer[slot_index] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                set_slot_value_by_position(prev_layer[slot_index], (int[]){b, 0}, 2, inputs[b][i] == j ? 1.0 : 0.0);
+            }
         }
     }
 
@@ -1202,16 +1205,20 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
 
-    int target_slots[num_outputs];
+    int target_slots[num_outputs * vocab_size];
     for (int i = 0; i < num_outputs; i++)
     {
-        target_slots[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
-        for (int b = 0; b < BATCH_SIZE; b++)
+        for (int j = 0; j < vocab_size; j++)
         {
-            set_slot_value_by_position(target_slots[i], (int[]){b, 0}, 2, labels[b] == i ? 1.0 : 0.0);
+            int slot_index = i * vocab_size + j;
+            target_slots[slot_index] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
+            for (int b = 0; b < BATCH_SIZE; b++)
+            {
+                // One-hot encoding: set 1.0 for the correct token index, 0.0 otherwise
+                set_slot_value_by_position(target_slots[slot_index], (int[]){b, 0}, 2, labels[b] == j ? 1.0 : 0.0);
+            }
         }
     }
-
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
 
     detect_orphans();
@@ -1281,66 +1288,66 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             }
         }
 
-        int seq_len = num_inputs / vocab_size;
-        int max_index = -111;
+        // int seq_len = num_inputs / vocab_size;
+        // int max_index = -111;
 
-        for (int p = 0; p < 50; p++)
-        {
-            if (max_index != -111)
-            {
-                for (int k = 0; k < (seq_len - 1); k++)
-                {
-                    set_slot_value_by_position(k, (int[]){0, 0}, 2, inputs[0][k + 1]);
-                }
-                inputs[0][(seq_len - 1)] = max_index;
-            }
+        // for (int p = 0; p < 50; p++)
+        // {
+        //     if (max_index != -111)
+        //     {
+        //         for (int k = 0; k < (seq_len - 1); k++)
+        //         {
+        //             set_slot_value_by_position(k, (int[]){0, 0}, 2, inputs[0][k + 1]);
+        //         }
+        //         inputs[0][(seq_len - 1)] = max_index;
+        //     }
 
-            compute_graph(loss_slot);
+        //     compute_graph(loss_slot);
 
-            double temperature = 0.6;
-            double softmax_values[num_outputs];
-            double exp_sum = 0.0;
+        //     double temperature = 0.6;
+        //     double softmax_values[num_outputs];
+        //     double exp_sum = 0.0;
 
-            for (int j = 0; j < num_outputs; j++)
-            {
-                double raw_value = get_slot_value_by_position(softmax_slots[j], (int[]){0, 0}, 2);
-                softmax_values[j] = exp(raw_value / temperature);
-                exp_sum += softmax_values[j];
-            }
+        //     for (int j = 0; j < num_outputs; j++)
+        //     {
+        //         double raw_value = get_slot_value_by_position(softmax_slots[j], (int[]){0, 0}, 2);
+        //         softmax_values[j] = exp(raw_value / temperature);
+        //         exp_sum += softmax_values[j];
+        //     }
 
-            for (int j = 0; j < num_outputs; j++)
-            {
-                softmax_values[j] /= exp_sum;
-            }
+        //     for (int j = 0; j < num_outputs; j++)
+        //     {
+        //         softmax_values[j] /= exp_sum;
+        //     }
 
-            double cumulative_prob = 0.0;
-            double random_value = (double)rand() / RAND_MAX;
-            int max_index = -111;
+        //     double cumulative_prob = 0.0;
+        //     double random_value = (double)rand() / RAND_MAX;
+        //     int max_index = -111;
 
-            for (int j = 0; j < num_outputs; j++)
-            {
-                cumulative_prob += softmax_values[j];
-                if (random_value <= cumulative_prob)
-                {
-                    max_index = j;
-                    break;
-                }
-            }
-            int num_tokens = 1;
-            int temp[MAX_MERGES] = {0};
-            temp[0] = index_to_char[max_index];
-            recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
-            assert(num_tokens < MAX_MERGES);
+        //     for (int j = 0; j < num_outputs; j++)
+        //     {
+        //         cumulative_prob += softmax_values[j];
+        //         if (random_value <= cumulative_prob)
+        //         {
+        //             max_index = j;
+        //             break;
+        //         }
+        //     }
+        //     int num_tokens = 1;
+        //     int temp[MAX_MERGES] = {0};
+        //     temp[0] = index_to_char[max_index];
+        //     recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
+        //     assert(num_tokens < MAX_MERGES);
 
-            // alternatively I can pass all the characters together also,
-            //  but then that would need a larger allocation of array
-            //  and this is also equivalent only
-            for (int x = 0; x < num_tokens; x++)
-            {
-                printf("%c", (char)temp[x]);
-            }
-        }
-        printf("\n");
+        //     // alternatively I can pass all the characters together also,
+        //     //  but then that would need a larger allocation of array
+        //     //  and this is also equivalent only
+        //     for (int x = 0; x < num_tokens; x++)
+        //     {
+        //         printf("%c", (char)temp[x]);
+        //     }
+        // }
+        // printf("\n");
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
     }
@@ -1425,7 +1432,7 @@ int main()
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size, 4, 4, 4, vocab_size};
+    int layer_sizes[] = {input_size * vocab_size, 4, 4, 4, vocab_size};
     int num_heads = 2;
     LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
     int num_layers = 5;
