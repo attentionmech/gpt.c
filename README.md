@@ -30,8 +30,6 @@ Implementing decoder-only GPT style transformer in C
 - [X] learnable embeddings (one-hot X matrix = embedding)
 - [X] adam optim
 - [ ] Layer Normalization  
-- [ ] Beam Search for better inference  
-- [ ] performance metrics (perplexity, loss tracking)
 
 Current State:
 
