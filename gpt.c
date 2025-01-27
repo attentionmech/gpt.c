@@ -1197,7 +1197,6 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
     prev_layer = create_feedforward_network(prev_layer, num_inputs, embed_size);
 
-
     for (int i = 1; i < num_layers; i++)
     {
 
@@ -1312,29 +1311,25 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
         }
 
         int seq_len = num_inputs / vocab_size;
-        int max_index = -111;
+        int max_index = -1;
 
         for (int p = 0; p < 50; p++)
         {
-            if (max_index != -111)
+            if (max_index != -1)
             {
                 for (int k = 0; k < (seq_len - 1); k++)
                 {
-                    set_slot_value_by_position(k, (int[]){0, 0}, 2, inputs[0][k + 1]);
+                    inputs[0][k] = inputs[0][k + 1];
                 }
-                inputs[0][(seq_len - 1)] = max_index;
+                inputs[0][seq_len - 1] = max_index;
             }
 
             for (int j = 0; j < num_inputs; j++)
             {
-                {
-                    double val = inputs[0][j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
-                    val += positional_encoding[j];
-                    set_slot_value_by_position(j, (int[]){0, 0}, 2,
-                                               val);
-                }
+                double val = inputs[0][j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
+                val += positional_encoding[j];
+                set_slot_value_by_position(j, (int[]){0, 0}, 2, val);
             }
-
 
             compute_graph(loss_slot);
 
@@ -1356,7 +1351,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
 
             double cumulative_prob = 0.0;
             double random_value = (double)rand() / RAND_MAX;
-            int max_index = -111;
+            max_index = -1;
 
             for (int j = 0; j < num_outputs; j++)
             {
@@ -1367,15 +1362,14 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                     break;
                 }
             }
+
+            // Recover the original tokens from the BPE tokens
             int num_tokens = 1;
             int temp[MAX_MERGES] = {0};
             temp[0] = index_to_char[max_index];
             recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
             assert(num_tokens < MAX_MERGES);
 
-            // alternatively I can pass all the characters together also,
-            //  but then that would need a larger allocation of array
-            //  and this is also equivalent only
             for (int x = 0; x < num_tokens; x++)
             {
                 printf("%c", (char)temp[x]);
@@ -1466,14 +1460,13 @@ int main()
     }
 
     double learning_rate = 0.01;
-
     int num_inputs = vocab_size * input_size;
     int embed_size = 32;
-
+    int num_layers = 5;
     int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
     int num_heads = 2;
     LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
-    int num_layers = 5;
+    
 
     train(inputs, labels, num_samples, learning_rate, num_inputs, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
 
