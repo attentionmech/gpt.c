@@ -25,9 +25,9 @@ Implementing decoder-only GPT style transformer in C
 - [X] Implement Self-Attention Mechanism
 - [X] Build a tokenization system (BPE)
 - [X] Stack Transformer blocks (works by repetition of layers)
-- [X] Multi-Head Attention  
+- [X] Multi-Head Attention
+- [X] positional Encoding  
 - [ ] learnable embeddings
-- [ ] positional Encoding  
 - [ ] Layer Normalization  
 - [ ] Greedy Decoding
 - [ ] Beam Search for better inference  
