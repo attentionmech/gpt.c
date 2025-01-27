@@ -59,6 +59,8 @@ typedef struct
     int num_dependencies;
     int learnable_param;
     int visited;
+    double *adam_m;
+    double *adam_v;
 } Slot;
 
 Slot slots[MAX_SLOTS];
@@ -1187,6 +1189,11 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     int *prev_layer = NULL;
     int *curr_layer = NULL;
 
+    // adam related
+    double beta1 = 0.9;
+    double beta2 = 0.999;
+    double epsilon = 1e-8;
+
     double *positional_encoding = generate_positional_encoding(seq_length, embed_size); // change later to embed_size
 
     prev_layer = malloc(num_inputs * sizeof(int));
@@ -1296,15 +1303,22 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 if (slots[j].learnable_param == 1)
                 {
-                    double grad_sum = 0.0;
-                    for (int b = 0; b < slots[j].size; b++)
+
+                    if (slots[j].adam_m == NULL)
                     {
-                        grad_sum += slots[j].gradient[b];
+                        slots[j].adam_m = (double *)calloc(slots[j].size, sizeof(double));
+                        slots[j].adam_v = (double *)calloc(slots[j].size, sizeof(double));
                     }
 
                     for (int b = 0; b < slots[j].size; b++)
                     {
-                        set_slot_value(j, b, get_slot_value(j, b) - learning_rate * grad_sum / slots[j].size);
+                        slots[j].adam_m[b] = beta1 * slots[j].adam_m[b] + (1.0 - beta1) * slots[j].gradient[b];
+                        slots[j].adam_v[b] = beta2 * slots[j].adam_v[b] + (1.0 - beta2) * slots[j].gradient[b] * slots[j].gradient[b];
+
+                        double m_hat = slots[j].adam_m[b] / (1.0 - pow(beta1, epoch + 1));
+                        double v_hat = slots[j].adam_v[b] / (1.0 - pow(beta2, epoch + 1));
+
+                        set_slot_value(j, b, get_slot_value(j, b) - learning_rate * m_hat / (sqrt(v_hat) + epsilon));
                     }
                 }
             }
@@ -1438,9 +1452,9 @@ int main()
     int input_size = SEQUENCE_LENGTH;
     int num_samples = num_numbers - SEQUENCE_LENGTH;
 
-    if (num_samples > 10000)
+    if (num_samples > 100)
     {
-        num_samples = 10000;
+        num_samples = 100;
     }
 
     int labels[num_samples];
@@ -1466,7 +1480,6 @@ int main()
     int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
     int num_heads = 2;
     LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
-    
 
     train(inputs, labels, num_samples, learning_rate, num_inputs, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
 
