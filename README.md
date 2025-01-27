@@ -32,7 +32,7 @@ Implementing decoder-only GPT style transformer in C
 - [ ] Greedy Decoding
 - [ ] Beam Search for better inference  
 - [ ] performance metrics (perplexity, loss tracking)
-- [ ] data batching and shuffling
+- [ ] adam optim
 
 Current State:
 
