@@ -1179,15 +1179,15 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_heads, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int num_inputs, int *layer_sizes, int num_heads, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
 {
-    int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
+    int embed_size = layer_sizes[0];
 
     int *prev_layer = NULL;
     int *curr_layer = NULL;
 
-    double *positional_encoding = generate_positional_encoding(seq_length, vocab_size); // change later to embed_size
+    double *positional_encoding = generate_positional_encoding(seq_length, embed_size); // change later to embed_size
 
     prev_layer = malloc(num_inputs * sizeof(int));
     for (int i = 0; i < num_inputs; i++)
@@ -1195,8 +1195,12 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
         prev_layer[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
     }
 
+    prev_layer = create_feedforward_network(prev_layer, num_inputs, embed_size);
+
+
     for (int i = 1; i < num_layers; i++)
     {
+
         if (layer_types[i] == LAYER_ATTENTION)
         {
             curr_layer = create_multihead_attention_layer(prev_layer, layer_sizes[i - 1], layer_sizes[i], num_heads);
@@ -1320,6 +1324,17 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
                 }
                 inputs[0][(seq_len - 1)] = max_index;
             }
+
+            for (int j = 0; j < num_inputs; j++)
+            {
+                {
+                    double val = inputs[0][j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
+                    val += positional_encoding[j];
+                    set_slot_value_by_position(j, (int[]){0, 0}, 2,
+                                               val);
+                }
+            }
+
 
             compute_graph(loss_slot);
 
@@ -1451,12 +1466,16 @@ int main()
     }
 
     double learning_rate = 0.01;
-    int layer_sizes[] = {input_size * vocab_size, 16, 16, 16, vocab_size};
-    int num_heads = 4;
+
+    int num_inputs = vocab_size * input_size;
+    int embed_size = 32;
+
+    int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
+    int num_heads = 2;
     LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
     int num_layers = 5;
 
-    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
+    train(inputs, labels, num_samples, learning_rate, num_inputs, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
 
     for (int i = 0; i < num_samples; i++)
     {
