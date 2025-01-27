@@ -66,6 +66,31 @@ int slot_counter = 0;
 double **dependency_buffer;
 bool is_referenced[MAX_SLOTS] = {false}; // orphan detection, optional
 
+// PE related functions
+
+double *generate_positional_encoding(int seq_length, int embed_size)
+{
+    double *positional_encoding = (double *)malloc(seq_length * embed_size * sizeof(double));
+    for (int pos = 0; pos < seq_length; pos++)
+    {
+        for (int i = 0; i < embed_size; i++)
+        {
+            double angle = pos / pow(10000, (2 * (i / 2)) / (double)embed_size);
+            if (i % 2 == 0)
+            {
+                positional_encoding[pos * embed_size + i] = sin(angle);
+            }
+            else
+            {
+                positional_encoding[pos * embed_size + i] = cos(angle);
+            }
+        }
+    }
+    return positional_encoding;
+}
+
+// BPE related functions
+
 void reverse_merge(int *tokens, int *num_tokens, BPEMerge *merge, int data_length)
 {
     int new_tokens[data_length * 2];
@@ -189,6 +214,8 @@ void learn_bpe_merges(int *numbers, int *num_numbers, BPEMerge *merges, int *num
         merge_pair(numbers, num_numbers, pair, merges[*num_merges - 1].merged, data_length);
     }
 }
+
+// BPE functions endding here
 
 const char *get_operation_name(OperationType op)
 {
@@ -1152,13 +1179,15 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_heads, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges)
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int *layer_sizes, int num_heads, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
 {
     int num_inputs = layer_sizes[0];
     int num_outputs = layer_sizes[num_layers - 1];
 
     int *prev_layer = NULL;
     int *curr_layer = NULL;
+
+    double *positional_encoding = generate_positional_encoding(seq_length, vocab_size); // change later to embed_size
 
     prev_layer = malloc(num_inputs * sizeof(int));
     for (int i = 0; i < num_inputs; i++)
@@ -1227,8 +1256,10 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
             {
                 for (int b = 0; b < BATCH_SIZE; b++)
                 {
-
-                    set_slot_value_by_position(j, (int[]){b, 0}, 2, inputs[i + b][j / vocab_size] == j % vocab_size ? 1.0 : 0.0);
+                    double val = inputs[i + b][j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
+                    val += positional_encoding[j];
+                    set_slot_value_by_position(j, (int[]){b, 0}, 2,
+                                               val);
                 }
             }
 
@@ -1425,7 +1456,7 @@ int main()
     LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
     int num_layers = 5;
 
-    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges);
+    train(inputs, labels, num_samples, learning_rate, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
 
     for (int i = 0; i < num_samples; i++)
     {
