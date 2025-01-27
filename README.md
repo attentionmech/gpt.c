@@ -27,7 +27,7 @@ Implementing decoder-only GPT style transformer in C
 - [X] Stack Transformer blocks (works by repetition of layers)
 - [X] Multi-Head Attention
 - [X] positional Encoding  
-- [ ] learnable embeddings
+- [X] learnable embeddings (one-hot X matrix = embedding)
 - [ ] Layer Normalization  
 - [ ] Greedy Decoding
 - [ ] Beam Search for better inference  
