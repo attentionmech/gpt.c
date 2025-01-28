@@ -28,11 +28,7 @@ Implementing decoder-only GPT style transformer in C
 - [X] Multi-Head Attention
 - [X] positional Encoding  
 - [X] learnable embeddings (one-hot X matrix = embedding)
-- [ ] Layer Normalization  
-- [ ] Greedy Decoding
-- [ ] Beam Search for better inference  
-- [ ] performance metrics (perplexity, loss tracking)
-- [ ] adam optim
+- [X] adam optim
 
 Current State:
 
