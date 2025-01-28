@@ -1200,7 +1200,7 @@ int *create_feedforward_network(Model *model, int *prev_layer_slots, int prev_la
     return curr_layer_slots;
 }
 
-Model *build_model(int num_inputs, int num_outputs, int embed_size, int layer_sizes[], ComponentType layer_types[], int num_layers, int num_heads)
+Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_size, int num_heads, int num_blocks, int mlp_size, int attention_size)
 {
     Model *model = (Model *)malloc(sizeof(Model));
 
@@ -1217,36 +1217,30 @@ Model *build_model(int num_inputs, int num_outputs, int embed_size, int layer_si
         prev_layer[i] = create_value_slot(model, 0, (int[]){BATCH_SIZE, 1}, 2);
     }
 
+    // embedding layer (ff based)
     prev_layer = create_feedforward_network(model, prev_layer, num_inputs, embed_size);
 
-    for (int i = 1; i < num_layers; i++)
+    int prev_prev_layer_size = num_inputs;
+    int prev_layer_size = embed_size;
+
+    for (int i = 0; i < num_blocks; i++)
     {
 
-        if (layer_types[i] == LAYER_ATTENTION)
-        {
-            curr_layer = create_multihead_attention_layer(model, prev_layer, layer_sizes[i - 1], layer_sizes[i], num_heads);
-        }
-        else if (layer_types[i] == LAYER_FEEDFORWARD)
-        {
-            if (layer_types[i - 1] == LAYER_ATTENTION)
-            {
-                curr_layer = create_feedforward_network(model, curr_layer, layer_sizes[i - 1] * layer_sizes[i - 2], layer_sizes[i]);
-            }
-            else
-            {
-                curr_layer = create_feedforward_network(model, prev_layer, layer_sizes[i - 1], layer_sizes[i]);
-            }
-        }
-        else
-        {
-            fprintf(stderr, "Unknown layer type at index %d\n", i);
-            exit(1);
-        }
+        curr_layer = create_multihead_attention_layer(model, prev_layer, prev_layer_size, attention_size, num_heads);
+        prev_prev_layer_size = prev_layer_size;
+        prev_layer_size = attention_size;
 
-        if (prev_layer)
-            free(prev_layer);
+        prev_layer = curr_layer;
+
+        curr_layer = create_feedforward_network(model, prev_layer, prev_prev_layer_size * prev_layer_size, mlp_size);
+        prev_prev_layer_size = prev_layer_size;
+        prev_layer_size = mlp_size;
+
         prev_layer = curr_layer;
     }
+
+    curr_layer = create_feedforward_network(model, prev_layer, mlp_size, vocab_size);
+
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(model, output_slots, num_outputs);
 
@@ -1513,14 +1507,10 @@ int main()
     double learning_rate = 0.01;
     int num_inputs = vocab_size * seq_len;
     int embed_size = 32;
-    int num_layers = 5;
     int num_heads = 2;
     int num_outputs = vocab_size;
 
-    ComponentType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
-    int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
-
-    Model *model = build_model(num_inputs, num_outputs, embed_size, layer_sizes, layer_types, num_layers, num_heads);
+    Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, 2, 4, 8);
 
     train(model, inputs, labels, num_samples, learning_rate, index_to_token, vocab_size, data_length, merges, num_merges, seq_len);
 
