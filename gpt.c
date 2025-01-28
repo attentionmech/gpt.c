@@ -37,6 +37,7 @@ typedef struct
     int loss_slot;
     int num_inputs;
     int num_outputs;
+    int embed_size;
 } Model;
 
 typedef enum
@@ -1193,9 +1194,8 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-Model *build_network(int num_inputs, int num_outputs, int vocab_size, int embed_size, int layer_sizes[], ComponentType layer_types[], int num_layers, int num_heads)
+Model *build_network(int num_inputs, int num_outputs, int embed_size, int layer_sizes[], ComponentType layer_types[], int num_layers, int num_heads)
 {
-
     Model *model = (Model *)malloc(sizeof(Model));
 
     int *prev_layer = NULL;
@@ -1242,14 +1242,10 @@ Model *build_network(int num_inputs, int num_outputs, int vocab_size, int embed_
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
 
-    int *target_slots = (int *)malloc(num_outputs * vocab_size * sizeof(int));
+    int *target_slots = (int *)malloc(num_outputs * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
-        for (int j = 0; j < vocab_size; j++)
-        {
-            int slot_index = i * vocab_size + j;
-            target_slots[slot_index] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
-        }
+        target_slots[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
     }
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
 
@@ -1260,17 +1256,16 @@ Model *build_network(int num_inputs, int num_outputs, int vocab_size, int embed_
     model->target_slots = target_slots;
     model->num_inputs = num_inputs;
     model->num_outputs = num_outputs;
+    model->embed_size = embed_size;
 
     return model;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int num_inputs, int *layer_sizes, int num_heads, ComponentType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
+void train(Model *model, double **inputs, int labels[], int num_samples, double learning_rate, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
 {
-    int num_outputs = layer_sizes[num_layers - 1];
-    int embed_size = layer_sizes[0];
-
-    Model *model = build_network(num_inputs, num_outputs, vocab_size, embed_size, layer_sizes, layer_types, num_layers, num_heads);
-
+    int num_outputs = model->num_outputs;
+    int num_inputs = model->num_inputs;
+    int embed_size = model->embed_size;
     int *input_slots = model->input_slots;
     int *output_slots = model->output_slots;
     int loss_slot = model->loss_slot;
@@ -1483,10 +1478,8 @@ int main()
         }
     }
 
-    int SEQUENCE_LENGTH = 4;
-
-    int input_size = SEQUENCE_LENGTH;
-    int num_samples = num_numbers - SEQUENCE_LENGTH;
+    int seq_len = 4;
+    int num_samples = num_numbers - seq_len;
 
     if (num_samples > 100)
     {
@@ -1497,27 +1490,31 @@ int main()
     double **inputs = (double **)malloc(num_samples * sizeof(double *));
     for (int i = 0; i < num_samples; i++)
     {
-        inputs[i] = (double *)malloc(input_size * sizeof(double));
+        inputs[i] = (double *)malloc(seq_len * sizeof(double));
     }
 
     for (int i = 0; i < num_samples; i++)
     {
-        for (int j = 0; j < input_size; j++)
+        for (int j = 0; j < seq_len; j++)
         {
             inputs[i][j] = (double)token_to_index[numbers[i + j]];
         }
-        labels[i] = (double)token_to_index[numbers[i + input_size]];
+        labels[i] = (double)token_to_index[numbers[i + seq_len]];
     }
 
     double learning_rate = 0.01;
-    int num_inputs = vocab_size * input_size;
+    int num_inputs = vocab_size * seq_len;
     int embed_size = 32;
     int num_layers = 5;
-    int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
     int num_heads = 2;
-    ComponentType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
+    int num_outputs = vocab_size;
 
-    train(inputs, labels, num_samples, learning_rate, num_inputs, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
+    ComponentType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
+    int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
+
+    Model *model = build_network(num_inputs, num_outputs, embed_size, layer_sizes, layer_types, num_layers, num_heads);
+
+    train(model, inputs, labels, num_samples, learning_rate, index_to_token, vocab_size, data_length, merges, num_merges, seq_len);
 
     for (int i = 0; i < num_samples; i++)
     {
