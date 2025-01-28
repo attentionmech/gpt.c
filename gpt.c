@@ -24,8 +24,20 @@ typedef struct
 typedef enum
 {
     LAYER_FEEDFORWARD,
-    LAYER_ATTENTION
-} LayerType;
+    LAYER_ATTENTION,
+    TRANSFORMER_BLOCK,
+} ComponentType;
+
+typedef struct
+{
+    int *input_slots;
+    int *output_slots;
+    int *target_slots;
+    int *softmax_slots;
+    int loss_slot;
+    int num_inputs;
+    int num_outputs;
+} Model;
 
 typedef enum
 {
@@ -1181,22 +1193,17 @@ int *create_feedforward_network(int *prev_layer_slots, int prev_layer_size, int 
     return curr_layer_slots;
 }
 
-void train(double **inputs, int labels[], int num_samples, double learning_rate, int num_inputs, int *layer_sizes, int num_heads, LayerType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
+Model *build_network(int num_inputs, int num_outputs, int vocab_size, int embed_size, int layer_sizes[], ComponentType layer_types[], int num_layers, int num_heads)
 {
-    int num_outputs = layer_sizes[num_layers - 1];
-    int embed_size = layer_sizes[0];
+
+    Model *model = (Model *)malloc(sizeof(Model));
 
     int *prev_layer = NULL;
     int *curr_layer = NULL;
 
-    // adam related
-    double beta1 = 0.9;
-    double beta2 = 0.999;
-    double epsilon = 1e-8;
-
-    double *positional_encoding = generate_positional_encoding(seq_length, embed_size); // change later to embed_size
-
     prev_layer = malloc(num_inputs * sizeof(int));
+
+    int *input_slots = prev_layer;
     for (int i = 0; i < num_inputs; i++)
     {
         prev_layer[i] = create_value_slot(0, (int[]){BATCH_SIZE, 1}, 2);
@@ -1235,7 +1242,7 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(output_slots, num_outputs);
 
-    int target_slots[num_outputs * vocab_size];
+    int *target_slots = (int *)malloc(num_outputs * vocab_size * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
         for (int j = 0; j < vocab_size; j++)
@@ -1246,8 +1253,37 @@ void train(double **inputs, int labels[], int num_samples, double learning_rate,
     }
     int loss_slot = create_cross_entropy_loss(target_slots, softmax_slots, num_outputs);
 
+    model->input_slots = input_slots;
+    model->output_slots = output_slots;
+    model->loss_slot = loss_slot;
+    model->softmax_slots = softmax_slots;
+    model->target_slots = target_slots;
+    model->num_inputs = num_inputs;
+    model->num_outputs = num_outputs;
+
+    return model;
+}
+
+void train(double **inputs, int labels[], int num_samples, double learning_rate, int num_inputs, int *layer_sizes, int num_heads, ComponentType *layer_types, int num_layers, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
+{
+    int num_outputs = layer_sizes[num_layers - 1];
+    int embed_size = layer_sizes[0];
+
+    Model *model = build_network(num_inputs, num_outputs, vocab_size, embed_size, layer_sizes, layer_types, num_layers, num_heads);
+
+    int *input_slots = model->input_slots;
+    int *output_slots = model->output_slots;
+    int loss_slot = model->loss_slot;
+    int *softmax_slots = model->softmax_slots;
+    int *target_slots = model->target_slots;
+
     detect_orphans();
-    // exit(1);
+    // adam related
+    double beta1 = 0.9;
+    double beta2 = 0.999;
+    double epsilon = 1e-8;
+
+    double *positional_encoding = generate_positional_encoding(seq_length, embed_size);
 
     srand(time(NULL));
 
@@ -1479,7 +1515,7 @@ int main()
     int num_layers = 5;
     int layer_sizes[] = {embed_size, 4, 4, 4, vocab_size};
     int num_heads = 2;
-    LayerType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
+    ComponentType layer_types[] = {LAYER_FEEDFORWARD, LAYER_FEEDFORWARD, LAYER_ATTENTION, LAYER_FEEDFORWARD, LAYER_FEEDFORWARD};
 
     train(inputs, labels, num_samples, learning_rate, num_inputs, layer_sizes, num_heads, layer_types, num_layers, index_to_token, vocab_size, data_length, merges, num_merges, input_size);
 
