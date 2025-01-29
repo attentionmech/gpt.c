@@ -1263,6 +1263,76 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     return model;
 }
 
+void inference(Model *model, double *sequence, int num_inputs, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_slot, int num_outputs, int *softmax_slots)
+{
+    int seq_len = num_inputs / vocab_size;
+    int max_index = -1;
+
+    for (int p = 0; p < 50; p++)
+    {
+        if (max_index != -1)
+        {
+            for (int k = 0; k < (seq_len - 1); k++)
+            {
+                sequence[k] = sequence[k + 1];
+            }
+            sequence[seq_len - 1] = max_index;
+        }
+
+        for (int j = 0; j < num_inputs; j++)
+        {
+            double val = sequence[j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
+            val += positional_encoding[j];
+            set_slot_value_by_position(model, j, (int[]){0, 0}, 2, val);
+        }
+
+        compute_graph(model, loss_slot);
+
+        double temperature = 0.6;
+        double softmax_values[num_outputs];
+        double exp_sum = 0.0;
+
+        for (int j = 0; j < num_outputs; j++)
+        {
+            double raw_value = get_slot_value_by_position(model, softmax_slots[j], (int[]){0, 0}, 2);
+            softmax_values[j] = exp(raw_value / temperature);
+            exp_sum += softmax_values[j];
+        }
+
+        for (int j = 0; j < num_outputs; j++)
+        {
+            softmax_values[j] /= exp_sum;
+        }
+
+        double cumulative_prob = 0.0;
+        double random_value = (double)rand() / RAND_MAX;
+        max_index = -1;
+
+        for (int j = 0; j < num_outputs; j++)
+        {
+            cumulative_prob += softmax_values[j];
+            if (random_value <= cumulative_prob)
+            {
+                max_index = j;
+                break;
+            }
+        }
+
+        // Recover the original tokens from the BPE tokens
+        int num_tokens = 1;
+        int temp[MAX_MERGES] = {0};
+        temp[0] = index_to_char[max_index];
+        recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
+        assert(num_tokens < MAX_MERGES);
+
+        for (int x = 0; x < num_tokens; x++)
+        {
+            printf("%c", (char)temp[x]);
+        }
+    }
+    printf("\n");
+}
+
 void train(Model *model, double **inputs, int labels[], int num_samples, double learning_rate, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
 {
     int num_outputs = model->num_outputs;
@@ -1357,72 +1427,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
             }
         }
 
-        int seq_len = num_inputs / vocab_size;
-        int max_index = -1;
-
-        for (int p = 0; p < 50; p++)
-        {
-            if (max_index != -1)
-            {
-                for (int k = 0; k < (seq_len - 1); k++)
-                {
-                    inputs[0][k] = inputs[0][k + 1];
-                }
-                inputs[0][seq_len - 1] = max_index;
-            }
-
-            for (int j = 0; j < num_inputs; j++)
-            {
-                double val = inputs[0][j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
-                val += positional_encoding[j];
-                set_slot_value_by_position(model, j, (int[]){0, 0}, 2, val);
-            }
-
-            compute_graph(model, loss_slot);
-
-            double temperature = 0.6;
-            double softmax_values[num_outputs];
-            double exp_sum = 0.0;
-
-            for (int j = 0; j < num_outputs; j++)
-            {
-                double raw_value = get_slot_value_by_position(model, softmax_slots[j], (int[]){0, 0}, 2);
-                softmax_values[j] = exp(raw_value / temperature);
-                exp_sum += softmax_values[j];
-            }
-
-            for (int j = 0; j < num_outputs; j++)
-            {
-                softmax_values[j] /= exp_sum;
-            }
-
-            double cumulative_prob = 0.0;
-            double random_value = (double)rand() / RAND_MAX;
-            max_index = -1;
-
-            for (int j = 0; j < num_outputs; j++)
-            {
-                cumulative_prob += softmax_values[j];
-                if (random_value <= cumulative_prob)
-                {
-                    max_index = j;
-                    break;
-                }
-            }
-
-            // Recover the original tokens from the BPE tokens
-            int num_tokens = 1;
-            int temp[MAX_MERGES] = {0};
-            temp[0] = index_to_char[max_index];
-            recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
-            assert(num_tokens < MAX_MERGES);
-
-            for (int x = 0; x < num_tokens; x++)
-            {
-                printf("%c", (char)temp[x]);
-            }
-        }
-        printf("\n");
+        inference(model, inputs[0], num_inputs, index_to_char, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
     }
