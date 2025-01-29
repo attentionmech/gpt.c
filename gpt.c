@@ -1471,6 +1471,8 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
         inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
+
+        fflush(stdin);
     }
 }
 
@@ -1482,6 +1484,8 @@ int main()
         fprintf(stderr, "Error opening file\n");
         return 1;
     }
+
+    setbuf(stdout, NULL);
 
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
@@ -1556,8 +1560,8 @@ int main()
     int num_heads = 4;
     int num_outputs = vocab_size;
     int num_blocks = 4;
-    int mlp_size = 32;
-    int attention_size = 32;
+    int mlp_size = 16;
+    int attention_size = 16;
 
     Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size);
 
