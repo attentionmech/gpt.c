@@ -6,7 +6,7 @@
 #include <time.h>
 #include <string.h>
 
-#define BATCH_SIZE 10
+#define BATCH_SIZE 50
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 #define MAX_SLOTS 10000000
 #define MAX_FILE_SIZE 10000
@@ -1394,15 +1394,15 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
 
     srand(time(NULL));
 
-    int EPOCHS = 1000;
+    int EPOCHS = 10000;
 
     for (int epoch = 0; epoch < EPOCHS; epoch++)
     {
+        printf("Epoch %d\n", epoch+1);
         double total_loss = 0.0;
 
         for (int i = 0; i + BATCH_SIZE < num_samples; i += BATCH_SIZE)
         {
-
             zerograd(model);
 
             for (int j = 0; j < num_inputs; j++)
@@ -1465,6 +1465,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
                     }
                 }
             }
+            printf("Epoch %d, Batch %d/ %d \n",  epoch + 1, i / BATCH_SIZE, num_samples/BATCH_SIZE);
         }
 
         inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
@@ -1525,12 +1526,12 @@ int main()
         }
     }
 
-    int seq_len = 4;
+    int seq_len = 64;
     int num_samples = num_numbers - seq_len;
 
-    if (num_samples > 100)
+    if (num_samples > 10000)
     {
-        num_samples = 100;
+        num_samples = 10000;
     }
 
     int labels[num_samples];
@@ -1552,10 +1553,13 @@ int main()
     double learning_rate = 0.01;
     int num_inputs = vocab_size * seq_len;
     int embed_size = 32;
-    int num_heads = 2;
+    int num_heads = 4;
     int num_outputs = vocab_size;
+    int num_blocks = 4;
+    int mlp_size = 32;
+    int attention_size = 32;
 
-    Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, 2, 4, 8);
+    Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size);
 
     train(model, inputs, labels, num_samples, learning_rate, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, seq_len);
 
