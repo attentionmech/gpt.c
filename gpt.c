@@ -229,6 +229,41 @@ void learn_bpe_merges(int *numbers, int *num_numbers, BPEMerge *merges, int *num
     }
 }
 
+double *preprocess_string(const char *str, int *token_to_index, BPEMerge *merges, int num_merges, int vocab_size, int seq_length)
+{
+    int len = strlen(str);
+    int numbers[len];
+    int num_numbers = 0;
+    for (int i = 0; i < len; i++)
+    {
+        numbers[num_numbers++] = (unsigned char)str[i];
+    }
+
+    bpe_tokenize(numbers, &num_numbers, merges, num_merges, len);
+
+    double *sequence = (double *)malloc(seq_length * sizeof(double));
+    for (int i = 0; i < seq_length; ++i)
+    {
+        if (i < num_numbers)
+        {
+            if (token_to_index[numbers[i]] != -1)
+            {
+                sequence[i] = (double)token_to_index[numbers[i]];
+            }
+            else
+            {
+                fprintf(stderr, "Error: Token not found in vocabulary.\n");
+                exit(1);
+            }
+        }
+        else
+        {
+            sequence[i] = 0; // Pad with a default value
+        }
+    }
+    return sequence;
+}
+
 // BPE functions endding here
 
 const char *get_operation_name(OperationType op)
@@ -1263,11 +1298,14 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     return model;
 }
 
-void inference(Model *model, double *sequence, int num_inputs, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_slot, int num_outputs, int *softmax_slots)
+void inference(Model *model, const char *input_string, int num_inputs, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_slot, int num_outputs, int *softmax_slots)
 {
     int seq_len = num_inputs / vocab_size;
     int max_index = -1;
 
+    double *sequence = preprocess_string(input_string, token_to_index, merges, num_merges, vocab_size, seq_len); // preprocess the input string
+
+    printf("\n%s", input_string);
     for (int p = 0; p < 50; p++)
     {
         if (max_index != -1)
@@ -1321,7 +1359,7 @@ void inference(Model *model, double *sequence, int num_inputs, int *index_to_cha
         // Recover the original tokens from the BPE tokens
         int num_tokens = 1;
         int temp[MAX_MERGES] = {0};
-        temp[0] = index_to_char[max_index];
+        temp[0] = index_to_token[max_index];
         recover_original_tokens(temp, &num_tokens, merges, num_merges, data_length);
         assert(num_tokens < MAX_MERGES);
 
@@ -1331,9 +1369,11 @@ void inference(Model *model, double *sequence, int num_inputs, int *index_to_cha
         }
     }
     printf("\n");
+
+    free(sequence);
 }
 
-void train(Model *model, double **inputs, int labels[], int num_samples, double learning_rate, int *index_to_char, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
+void train(Model *model, double **inputs, int labels[], int num_samples, double learning_rate, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
 {
     int num_outputs = model->num_outputs;
     int num_inputs = model->num_inputs;
@@ -1427,7 +1467,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
             }
         }
 
-        inference(model, inputs[0], num_inputs, index_to_char, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
+        inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
     }
@@ -1517,7 +1557,7 @@ int main()
 
     Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, 2, 4, 8);
 
-    train(model, inputs, labels, num_samples, learning_rate, index_to_token, vocab_size, data_length, merges, num_merges, seq_len);
+    train(model, inputs, labels, num_samples, learning_rate, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, seq_len);
 
     for (int i = 0; i < num_samples; i++)
     {
