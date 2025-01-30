@@ -44,7 +44,9 @@ dataset is within the repo itself
 - [X] positional Encoding  
 - [X] learnable embeddings (one-hot X matrix = embedding)
 - [X] adam optim
-- [ ] add layer norms, dropout, and residuals
+- [X] add dropout
+- [ ] residual
+- [ ] layernorms
 
 #### issues encountered:
 
