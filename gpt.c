@@ -8,11 +8,14 @@
 
 #define BATCH_SIZE 50
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
-#define MAX_nodeS 10000000
 #define MAX_FILE_SIZE 10000
 #define MAX_SAMPLES 1000
 
 // bpe related
+// byte pair encoder just takes your characters and
+// merges them together as many times you wish
+// until you get a desired vocabulary size
+// merges are based on frequency of token pairs
 #define MAX_VOCAB_SIZE 10000
 #define MAX_MERGES 100
 

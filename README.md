@@ -47,6 +47,8 @@ dataset is within the repo itself
 - [X] add dropout
 - [ ] residual
 - [ ] layernorms
+- [ ] handle resume/restart of training
+- [ ] allow inference from saved file
 
 #### issues encountered:
 
