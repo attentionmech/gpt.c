@@ -6,10 +6,11 @@
 #include <time.h>
 #include <string.h>
 
-#define BATCH_SIZE 50
+#define BATCH_SIZE 10
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 #define MAX_SLOTS 10000000
 #define MAX_FILE_SIZE 10000
+#define MAX_SAMPLES 1000
 
 // bpe related
 #define MAX_VOCAB_SIZE 10000
@@ -43,6 +44,8 @@ typedef enum
     GELU,
     LEAKY_RELU,
 
+    DROPOUT,
+
     PARAMETER, // nodes which are just values (leaf nodes)
 } OperationType;
 
@@ -61,6 +64,7 @@ typedef struct
     int visited;
     double *adam_m;
     double *adam_v;
+    double dropout_rate;
 } Slot;
 
 typedef struct
@@ -589,6 +593,21 @@ double _mul(double **list, int b, int length)
     return product;
 }
 
+void dropout_operation(double *input, double *output, int size, double dropout_rate)
+{
+    for (int i = 0; i < size; ++i)
+    {
+        if ((double)rand() / RAND_MAX > dropout_rate)
+        {
+            output[i] = input[i];
+        }
+        else
+        {
+            output[i] = 0.0;
+        }
+    }
+}
+
 double *compute_graph(Model *model, int slot)
 {
     Slot *s = &model->slots[slot];
@@ -690,6 +709,9 @@ double *compute_graph(Model *model, int slot)
                 double x = dep_value[0][b];
                 s->value[b] = 0.5 * x * (1.0 + tanh(sqrt(2.0 / M_PI) * (x + 0.044715 * x * x * x)));
             }
+            break;
+        case DROPOUT:
+            dropout_operation(dep_value[0], s->value, s->size, model->slots[slot].dropout_rate);
             break;
 
         default:
@@ -1199,7 +1221,7 @@ int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int 
     return context;
 }
 
-int *create_feedforward_network(Model *model, int *prev_layer_slots, int prev_layer_size, int curr_layer_size)
+int *create_feedforward_network(Model *model, int *prev_layer_slots, int prev_layer_size, int curr_layer_size, double dropout_rate)
 {
     int *curr_layer_slots = malloc(curr_layer_size * sizeof(int));
 
@@ -1228,13 +1250,17 @@ int *create_feedforward_network(Model *model, int *prev_layer_slots, int prev_la
 
         int bias = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
         int biased = create_operation_slot(model, ADD, wrap_in_array(sum, bias), 2, (int[]){BATCH_SIZE, 1}, 2);
-        curr_layer_slots[neuron] = create_operation_slot(model, RELU, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
+
+        int dropout_slot = create_operation_slot(model, DROPOUT, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
+        model->slots[dropout_slot].dropout_rate = dropout_rate;
+
+        curr_layer_slots[neuron] = create_operation_slot(model, RELU, wrap_value_in_array(dropout_slot), 1, (int[]){BATCH_SIZE, 1}, 2);
     }
 
     return curr_layer_slots;
 }
 
-Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_size, int num_heads, int num_blocks, int mlp_size, int attention_size)
+Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_size, int num_heads, int num_blocks, int mlp_size, int attention_size, double dropout_rate)
 {
     Model *model = (Model *)malloc(sizeof(Model));
 
@@ -1252,7 +1278,7 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     }
 
     // embedding layer (ff based)
-    prev_layer = create_feedforward_network(model, prev_layer, num_inputs, embed_size);
+    prev_layer = create_feedforward_network(model, prev_layer, num_inputs, embed_size, dropout_rate);
 
     int prev_prev_layer_size = num_inputs;
     int prev_layer_size = embed_size;
@@ -1266,14 +1292,14 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
 
         prev_layer = curr_layer;
 
-        curr_layer = create_feedforward_network(model, prev_layer, prev_prev_layer_size * prev_layer_size, mlp_size);
+        curr_layer = create_feedforward_network(model, prev_layer, prev_prev_layer_size * prev_layer_size, mlp_size, dropout_rate);
         prev_prev_layer_size = prev_layer_size;
         prev_layer_size = mlp_size;
 
         prev_layer = curr_layer;
     }
 
-    curr_layer = create_feedforward_network(model, prev_layer, mlp_size, vocab_size);
+    curr_layer = create_feedforward_network(model, prev_layer, mlp_size, vocab_size, dropout_rate);
 
     int *output_slots = curr_layer;
     int *softmax_slots = create_softmax_layer(model, output_slots, num_outputs);
@@ -1397,7 +1423,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
 
     for (int epoch = 0; epoch < EPOCHS; epoch++)
     {
-        printf("Epoch %d\n", epoch+1);
+        printf("Epoch %d\n", epoch + 1);
         double total_loss = 0.0;
 
         for (int i = 0; i + BATCH_SIZE < num_samples; i += BATCH_SIZE)
@@ -1464,7 +1490,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
                     }
                 }
             }
-            printf("Epoch %d, Batch %d/ %d \n",  epoch + 1, i / BATCH_SIZE, num_samples/BATCH_SIZE);
+            printf("Epoch %d, Batch %d/ %d \n", epoch + 1, i / BATCH_SIZE, num_samples / BATCH_SIZE);
         }
 
         inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
@@ -1532,9 +1558,9 @@ int main()
     int seq_len = 64;
     int num_samples = num_numbers - seq_len;
 
-    if (num_samples > 10000)
+    if (num_samples > MAX_SAMPLES)
     {
-        num_samples = 10000;
+        num_samples = MAX_SAMPLES;
     }
 
     int labels[num_samples];
@@ -1561,8 +1587,9 @@ int main()
     int num_blocks = 4;
     int mlp_size = 16;
     int attention_size = 16;
+    double dropout_rate = 0.3;
 
-    Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size);
+    Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size, dropout_rate);
 
     train(model, inputs, labels, num_samples, learning_rate, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, seq_len);
 
