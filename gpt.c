@@ -25,7 +25,6 @@ typedef enum
 {
     LAYER_FEEDFORWARD,
     LAYER_ATTENTION,
-    TRANSFORMER_BLOCK,
 } ComponentType;
 
 typedef enum
