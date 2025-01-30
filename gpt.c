@@ -743,6 +743,11 @@ void compute_grad(Model *model, int slot)
     {
         Slot *s = &model->slots[curr];
 
+        if (s->dropped == true)
+        {
+            continue;
+        }
+
         if (s->num_dependencies > 0)
         {
 
@@ -862,6 +867,16 @@ void compute_grad(Model *model, int slot)
                 {
 
                     model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dependency_buffer[b][0]);
+                }
+                break;
+
+            case DROPOUT:
+                for (int b = 0; b < s->size; b++)
+                {
+                    if (!s->dropped)
+                    {
+                        model->slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                    }
                 }
                 break;
 
@@ -1612,7 +1627,7 @@ int main()
     int num_blocks = 4;
     int mlp_size = 16;
     int attention_size = 16;
-    double dropout_rate = 0.3;
+    double dropout_rate = 0.1;
 
     Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size, dropout_rate);
 
