@@ -6,7 +6,7 @@
 #include <time.h>
 #include <string.h>
 
-#define BATCH_SIZE 10
+#define BATCH_SIZE 50
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 #define MAX_SLOTS 10000000
 #define MAX_FILE_SIZE 10000
@@ -950,7 +950,7 @@ int create_cross_entropy_loss(Model *model, int *target_slots, int *softmax_slot
     return neg_cross_entropy;
 }
 
-int *create_multihead_attention_layer(Model *model, int *input_slots, int num_inputs, int d_model, int num_heads)
+int *create_multihead_attention_layer(Model *model, int *input_slots, int num_inputs, int d_model, int num_heads, double dropout_rate)
 {
     int head_dim = d_model / num_heads;
     if (d_model % num_heads != 0)
@@ -1022,6 +1022,17 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
                 Q[h][i * head_dim + j] = q_sum;
                 K[h][i * head_dim + j] = k_sum;
                 V[h][i * head_dim + j] = v_sum;
+                int q_dropout = create_operation_slot(model, DROPOUT, wrap_value_in_array(Q[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
+                model->slots[q_dropout].dropout_rate = dropout_rate;
+                Q[h][i * head_dim + j] = q_dropout;
+
+                int k_dropout = create_operation_slot(model, DROPOUT, wrap_value_in_array(K[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
+                model->slots[k_dropout].dropout_rate = dropout_rate;
+                K[h][i * head_dim + j] = k_dropout;
+
+                int v_dropout = create_operation_slot(model, DROPOUT, wrap_value_in_array(V[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
+                model->slots[v_dropout].dropout_rate = dropout_rate;
+                V[h][i * head_dim + j] = v_dropout;
             }
         }
     }
@@ -1057,10 +1068,17 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
             }
         }
 
+        int *dropout_scores = malloc(seq_length * seq_length * sizeof(int));
+        for (int i = 0; i < seq_length * seq_length; i++)
+        {
+            dropout_scores[i] = create_operation_slot(model, DROPOUT, wrap_value_in_array(attention_scores[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
+            model->slots[dropout_scores[i]].dropout_rate = dropout_rate;
+        }
+
         int *attention_weights = malloc(seq_length * seq_length * sizeof(int));
         for (int i = 0; i < seq_length; i++)
         {
-            int *row_scores = &attention_scores[i * seq_length];
+            int *row_scores = &dropout_scores[i * seq_length];
             int *softmax_row = create_softmax_layer(model, row_scores, seq_length);
             for (int j = 0; j < seq_length; j++)
             {
@@ -1088,6 +1106,7 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
 
         free(attention_scores);
         free(attention_weights);
+        free(dropout_scores);
     }
 
     free(Q_weights);
@@ -1100,6 +1119,7 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
     return context;
 }
 
+// not used, keeping to to compare
 int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int d_model)
 {
     int Q_weights[d_model * num_inputs];
@@ -1286,7 +1306,7 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     for (int i = 0; i < num_blocks; i++)
     {
 
-        curr_layer = create_multihead_attention_layer(model, prev_layer, prev_layer_size, attention_size, num_heads);
+        curr_layer = create_multihead_attention_layer(model, prev_layer, prev_layer_size, attention_size, num_heads, dropout_rate);
         prev_prev_layer_size = prev_layer_size;
         prev_layer_size = attention_size;
 
