@@ -8,7 +8,7 @@
 
 #define BATCH_SIZE 50
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
-#define MAX_SLOTS 10000000
+#define MAX_nodeS 10000000
 #define MAX_FILE_SIZE 10000
 #define MAX_SAMPLES 1000
 
@@ -66,22 +66,22 @@ typedef struct
     double *adam_v;
     double dropout_rate;
     bool dropped;
-} Slot;
+} Node;
 
 typedef struct
 {
-    Slot *slots;
-    int *input_slots;
-    int *output_slots;
-    int *target_slots;
-    int *softmax_slots;
-    int loss_slot;
+    Node *nodes;
+    int *input_nodes;
+    int *output_nodes;
+    int *target_nodes;
+    int *softmax_nodes;
+    int loss_node;
     int num_inputs;
     int num_outputs;
     int embed_size;
 } Model;
 
-int slot_counter = 0;
+int node_counter = 0;
 double **dependency_buffer;
 
 // PE related functions
@@ -307,28 +307,28 @@ const char *get_operation_name(OperationType op)
 
 void detect_orphans(Model *model)
 {
-    bool *is_referenced = (bool *)malloc(MAX_SLOTS * sizeof(bool));
-    for (int i = 0; i < MAX_SLOTS; i++)
+    bool *is_referenced = (bool *)malloc(MAX_nodeS * sizeof(bool));
+    for (int i = 0; i < MAX_nodeS; i++)
     {
         is_referenced[i] = false;
     }
 
-    for (int i = 0; i < slot_counter; i++)
+    for (int i = 0; i < node_counter; i++)
     {
-        Slot *s = &model->slots[i];
+        Node *s = &model->nodes[i];
         for (int j = 0; j < s->num_dependencies; j++)
         {
-            int dep_slot = s->dependencies[j];
-            is_referenced[dep_slot] = true;
+            int dep_node = s->dependencies[j];
+            is_referenced[dep_node] = true;
         }
     }
 
-    printf("Orphan slots:\n");
-    for (int i = 0; i < slot_counter; i++)
+    printf("Orphan nodes (only loss node should be here):\n");
+    for (int i = 0; i < node_counter; i++)
     {
-        if (!is_referenced[i] && model->slots[i].num_dependencies > 0)
+        if (!is_referenced[i] && model->nodes[i].num_dependencies > 0)
         {
-            printf("Slot %d (Operation: %s) is an orphan.\n", i, get_operation_name(model->slots[i].operation));
+            printf("Node %d (Operation: %s) is an orphan.\n", i, get_operation_name(model->nodes[i].operation));
         }
     }
 
@@ -348,11 +348,11 @@ void export_graph_to_dot(Model *model, const char *filename)
     fprintf(file, "    rankdir=LR; // Left-to-right graph layout\n");
     fprintf(file, "    node [shape=record, style=filled];\n");
 
-    for (int i = 0; i < slot_counter; i++)
+    for (int i = 0; i < node_counter; i++)
     {
-        Slot *s = &model->slots[i];
+        Node *s = &model->nodes[i];
 
-        fprintf(file, "    slot_%d [label=\"{%d | {", i, i);
+        fprintf(file, "    node_%d [label=\"{%d | {", i, i);
 
         fprintf(file, "Op: %s", get_operation_name(s->operation));
 
@@ -398,7 +398,7 @@ void export_graph_to_dot(Model *model, const char *filename)
 
         for (int j = 0; j < s->num_dependencies; j++)
         {
-            fprintf(file, "    slot_%d -> slot_%d;\n", s->dependencies[j], i);
+            fprintf(file, "    node_%d -> node_%d;\n", s->dependencies[j], i);
         }
     }
 
@@ -409,14 +409,14 @@ void export_graph_to_dot(Model *model, const char *filename)
 
 // --------------------------------------------
 
-int increment_slot()
+int increment_node()
 {
-    if (slot_counter >= MAX_SLOTS)
+    if (node_counter >= MAX_nodeS)
     {
-        fprintf(stderr, "Error: Exceeded maximum number of slots (%d)\n", MAX_SLOTS);
+        fprintf(stderr, "Error: Exceeded maximum number of nodes (%d)\n", MAX_nodeS);
         exit(EXIT_FAILURE);
     }
-    return slot_counter++;
+    return node_counter++;
 }
 
 double generate_normal(double mean, double stddev)
@@ -429,21 +429,21 @@ double generate_normal(double mean, double stddev)
     return z0 * stddev + mean;
 }
 
-int create_value_slot(Model *model, int learnable_param, int *shape, int num_dimensions)
+int create_value_node(Model *model, int learnable_param, int *shape, int num_dimensions)
 {
-    model->slots[slot_counter].num_dimensions = num_dimensions;
-    model->slots[slot_counter].shape = (int *)malloc(num_dimensions * sizeof(int));
+    model->nodes[node_counter].num_dimensions = num_dimensions;
+    model->nodes[node_counter].shape = (int *)malloc(num_dimensions * sizeof(int));
     for (int i = 0; i < num_dimensions; i++)
     {
-        model->slots[slot_counter].shape[i] = shape[i];
+        model->nodes[node_counter].shape[i] = shape[i];
     }
 
-    model->slots[slot_counter].strides = (int *)malloc(num_dimensions * sizeof(int));
-    model->slots[slot_counter].strides[num_dimensions - 1] = 1;
+    model->nodes[node_counter].strides = (int *)malloc(num_dimensions * sizeof(int));
+    model->nodes[node_counter].strides[num_dimensions - 1] = 1;
     for (int i = num_dimensions - 2; i >= 0; i--)
     {
-        model->slots[slot_counter].strides[i] =
-            model->slots[slot_counter].strides[i + 1] * shape[i + 1];
+        model->nodes[node_counter].strides[i] =
+            model->nodes[node_counter].strides[i + 1] * shape[i + 1];
     }
 
     int total_size = 1;
@@ -458,48 +458,48 @@ int create_value_slot(Model *model, int learnable_param, int *shape, int num_dim
         exit(EXIT_FAILURE);
     }
 
-    model->slots[slot_counter].size = total_size;
+    model->nodes[node_counter].size = total_size;
 
-    model->slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
-    model->slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
+    model->nodes[node_counter].value = (double *)malloc(total_size * sizeof(double));
+    model->nodes[node_counter].gradient = (double *)malloc(total_size * sizeof(double));
 
     if (learnable_param)
     {
-        for (int b = 0; b < model->slots[slot_counter].size; b++)
+        for (int b = 0; b < model->nodes[node_counter].size; b++)
         {
-            model->slots[slot_counter].value[b] = generate_normal(0.0, 1.0);
+            model->nodes[node_counter].value[b] = generate_normal(0.0, 1.0);
         }
     }
 
-    model->slots[slot_counter].operation = PARAMETER;
-    model->slots[slot_counter].num_dependencies = 0;
-    model->slots[slot_counter].learnable_param = learnable_param;
+    model->nodes[node_counter].operation = PARAMETER;
+    model->nodes[node_counter].num_dependencies = 0;
+    model->nodes[node_counter].learnable_param = learnable_param;
 
-    model->slots[slot_counter].dropped = false;
-    model->slots[slot_counter].dropout_rate = 0;
+    model->nodes[node_counter].dropped = false;
+    model->nodes[node_counter].dropout_rate = 0;
 
-    return increment_slot();
+    return increment_node();
 }
 
-int create_operation_slot(Model *model, OperationType op, int *dep, int num_dependencies, int *shape, int num_dimensions)
+int create_operation_node(Model *model, OperationType op, int *dep, int num_dependencies, int *shape, int num_dimensions)
 {
-    model->slots[slot_counter].operation = op;
-    model->slots[slot_counter].dependencies = dep;
-    model->slots[slot_counter].num_dependencies = num_dependencies;
+    model->nodes[node_counter].operation = op;
+    model->nodes[node_counter].dependencies = dep;
+    model->nodes[node_counter].num_dependencies = num_dependencies;
 
-    model->slots[slot_counter].num_dimensions = num_dimensions;
-    model->slots[slot_counter].shape = (int *)malloc(num_dimensions * sizeof(int));
+    model->nodes[node_counter].num_dimensions = num_dimensions;
+    model->nodes[node_counter].shape = (int *)malloc(num_dimensions * sizeof(int));
     for (int i = 0; i < num_dimensions; i++)
     {
-        model->slots[slot_counter].shape[i] = shape[i];
+        model->nodes[node_counter].shape[i] = shape[i];
     }
 
-    model->slots[slot_counter].strides = (int *)malloc(num_dimensions * sizeof(int));
-    model->slots[slot_counter].strides[num_dimensions - 1] = 1;
+    model->nodes[node_counter].strides = (int *)malloc(num_dimensions * sizeof(int));
+    model->nodes[node_counter].strides[num_dimensions - 1] = 1;
     for (int i = num_dimensions - 2; i >= 0; i--)
     {
-        model->slots[slot_counter].strides[i] =
-            model->slots[slot_counter].strides[i + 1] * shape[i + 1];
+        model->nodes[node_counter].strides[i] =
+            model->nodes[node_counter].strides[i + 1] * shape[i + 1];
     }
 
     int total_size = 1;
@@ -514,67 +514,67 @@ int create_operation_slot(Model *model, OperationType op, int *dep, int num_depe
         exit(EXIT_FAILURE);
     }
 
-    model->slots[slot_counter].size = total_size;
-    model->slots[slot_counter].value = (double *)malloc(total_size * sizeof(double));
-    model->slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
+    model->nodes[node_counter].size = total_size;
+    model->nodes[node_counter].value = (double *)malloc(total_size * sizeof(double));
+    model->nodes[node_counter].gradient = (double *)malloc(total_size * sizeof(double));
 
-    model->slots[slot_counter].learnable_param = 1;
+    model->nodes[node_counter].learnable_param = 1;
 
-    model->slots[slot_counter].dropped = false;
-    model->slots[slot_counter].dropout_rate = 0;
+    model->nodes[node_counter].dropped = false;
+    model->nodes[node_counter].dropout_rate = 0;
 
-    return increment_slot();
+    return increment_node();
 }
 
-void set_slot_value_by_position(Model *model, int slot, int *position, int num_dimensions, double value)
+void set_node_value_by_position(Model *model, int node, int *position, int num_dimensions, double value)
 {
     int pos = 0;
     for (int i = 0; i < num_dimensions - 1; i++)
     {
-        pos += model->slots[slot].strides[i] * position[i];
+        pos += model->nodes[node].strides[i] * position[i];
     }
     pos += position[num_dimensions - 1];
 
-    if (pos >= model->slots[slot].size)
+    if (pos >= model->nodes[node].size)
     {
         fprintf(stderr, "Error: Index out of bounds\n");
         exit(EXIT_FAILURE);
     }
 
-    model->slots[slot].value[pos] = value;
+    model->nodes[node].value[pos] = value;
 }
 
-void set_slot_value(Model *model, int slot, int b_index, double v)
+void set_node_value(Model *model, int node, int b_index, double v)
 {
-    model->slots[slot].value[b_index] = v;
+    model->nodes[node].value[b_index] = v;
 }
 
-double get_slot_value(Model *model, int slot, int index)
+double get_node_value(Model *model, int node, int index)
 {
-    if (index >= model->slots[slot].size)
+    if (index >= model->nodes[node].size)
     {
         fprintf(stderr, "Error: Index out of bounds\n");
         exit(EXIT_FAILURE);
     }
-    return model->slots[slot].value[index];
+    return model->nodes[node].value[index];
 }
 
-double get_slot_value_by_position(Model *model, int slot, int *position, int num_dimensions)
+double get_node_value_by_position(Model *model, int node, int *position, int num_dimensions)
 {
     int pos = 0;
     for (int i = 0; i < num_dimensions - 1; i++)
     {
-        pos += model->slots[slot].strides[i] * position[i];
+        pos += model->nodes[node].strides[i] * position[i];
     }
     pos += position[num_dimensions - 1];
 
-    if (pos >= model->slots[slot].size)
+    if (pos >= model->nodes[node].size)
     {
         fprintf(stderr, "Error: Index out of bounds\n");
         exit(EXIT_FAILURE);
     }
 
-    return model->slots[slot].value[pos];
+    return model->nodes[node].value[pos];
 }
 
 double _sum(double **list, int b, int length)
@@ -600,9 +600,9 @@ double _mul(double **list, int b, int length)
     return product;
 }
 
-double *compute_graph(Model *model, int slot)
+double *compute_graph(Model *model, int node)
 {
-    Slot *s = &model->slots[slot];
+    Node *s = &model->nodes[node];
 
     if (s->visited)
     {
@@ -727,7 +727,7 @@ double *compute_graph(Model *model, int slot)
     return s->value;
 }
 
-void compute_grad(Model *model, int slot)
+void compute_grad(Model *model, int node)
 {
 
     if (dependency_buffer == NULL)
@@ -735,13 +735,13 @@ void compute_grad(Model *model, int slot)
         dependency_buffer = (double **)malloc(MAX_ELEMENTS * sizeof(double *));
         for (int b = 0; b < MAX_ELEMENTS; b++)
         {
-            dependency_buffer[b] = (double *)malloc(model->slots[slot].num_dependencies * sizeof(double));
+            dependency_buffer[b] = (double *)malloc(model->nodes[node].num_dependencies * sizeof(double));
         }
     }
 
-    for (int curr = slot; curr >= 0; curr--)
+    for (int curr = node; curr >= 0; curr--)
     {
-        Slot *s = &model->slots[curr];
+        Node *s = &model->nodes[curr];
 
         if (s->dropped == true)
         {
@@ -755,7 +755,7 @@ void compute_grad(Model *model, int slot)
             {
                 for (int b = 0; b < s->size; b++)
                 {
-                    dependency_buffer[b][j] = get_slot_value(model, s->dependencies[j], b);
+                    dependency_buffer[b][j] = get_node_value(model, s->dependencies[j], b);
                 }
             }
 
@@ -766,7 +766,7 @@ void compute_grad(Model *model, int slot)
                 {
                     for (int b = 0; b < s->size; b++)
                     {
-                        model->slots[s->dependencies[i]].gradient[b] += s->gradient[b];
+                        model->nodes[s->dependencies[i]].gradient[b] += s->gradient[b];
                     }
                 }
                 break;
@@ -781,7 +781,7 @@ void compute_grad(Model *model, int slot)
                     }
                     for (int i = 0; i < s->num_dependencies; i++)
                     {
-                        model->slots[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dependency_buffer[b][i]);
+                        model->nodes[s->dependencies[i]].gradient[b] += s->gradient[b] * (product / dependency_buffer[b][i]);
                     }
                 }
                 break;
@@ -789,22 +789,22 @@ void compute_grad(Model *model, int slot)
             case SUB:
                 for (int b = 0; b < s->size; b++)
                 {
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b];
-                    model->slots[s->dependencies[1]].gradient[b] -= s->gradient[b];
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b];
+                    model->nodes[s->dependencies[1]].gradient[b] -= s->gradient[b];
                 }
                 break;
 
             case POW2:
                 for (int b = 0; b < s->size; b++)
                 {
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dependency_buffer[b][0];
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] * 2.0 * dependency_buffer[b][0];
                 }
                 break;
 
             case SIGMOID:
                 for (int b = 0; b < s->size; b++)
                 {
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b] * (1.0 - s->value[b]);
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b] * (1.0 - s->value[b]);
                 }
                 break;
 
@@ -813,7 +813,7 @@ void compute_grad(Model *model, int slot)
                 {
                     if (dependency_buffer[b][0] > 0)
                     {
-                        model->slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                        model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b];
                     }
                 }
                 break;
@@ -822,7 +822,7 @@ void compute_grad(Model *model, int slot)
                 for (int b = 0; b < s->size; b++)
                 {
                     double alpha = 0.01;
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] *
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] *
                                                                     (dependency_buffer[b][0] > 0 ? 1.0 : alpha);
                 }
                 break;
@@ -834,14 +834,14 @@ void compute_grad(Model *model, int slot)
                     double tanh_arg = sqrt(2.0 / M_PI) * (x + 0.044715 * x * x * x);
                     double tanh_val = tanh(tanh_arg);
                     double derivative = 0.5 * (1 + tanh_val + x * (1 - tanh_val * tanh_val) * sqrt(2.0 / M_PI) * (1 + 3 * 0.044715 * x * x));
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * derivative;
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] * derivative;
                 }
                 break;
 
             case EXP:
                 for (int b = 0; b < s->size; b++)
                 {
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b];
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] * s->value[b];
                 }
                 break;
 
@@ -849,7 +849,7 @@ void compute_grad(Model *model, int slot)
                 for (int b = 0; b < s->size; b++)
                 {
 
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * -1.0;
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] * -1.0;
                 }
                 break;
 
@@ -857,8 +857,8 @@ void compute_grad(Model *model, int slot)
                 for (int b = 0; b < s->size; b++)
                 {
 
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] / dependency_buffer[b][1];
-                    model->slots[s->dependencies[1]].gradient[b] -= s->gradient[b] * dependency_buffer[b][0] / (dependency_buffer[b][1] * dependency_buffer[b][1]);
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] / dependency_buffer[b][1];
+                    model->nodes[s->dependencies[1]].gradient[b] -= s->gradient[b] * dependency_buffer[b][0] / (dependency_buffer[b][1] * dependency_buffer[b][1]);
                 }
                 break;
 
@@ -866,7 +866,7 @@ void compute_grad(Model *model, int slot)
                 for (int b = 0; b < s->size; b++)
                 {
 
-                    model->slots[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dependency_buffer[b][0]);
+                    model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b] * (1.0 / dependency_buffer[b][0]);
                 }
                 break;
 
@@ -875,7 +875,7 @@ void compute_grad(Model *model, int slot)
                 {
                     if (!s->dropped)
                     {
-                        model->slots[s->dependencies[0]].gradient[b] += s->gradient[b];
+                        model->nodes[s->dependencies[0]].gradient[b] += s->gradient[b];
                     }
                 }
                 break;
@@ -889,13 +889,13 @@ void compute_grad(Model *model, int slot)
 
 int zerograd(Model *model)
 {
-    for (int j = 0; j < slot_counter; j++)
+    for (int j = 0; j < node_counter; j++)
     {
-        for (int b = 0; b < model->slots[j].size; b++)
+        for (int b = 0; b < model->nodes[j].size; b++)
         {
-            model->slots[j].gradient[b] = 0.0;
-            model->slots[j].visited = 0;
-            model->slots[j].dropped = 0;
+            model->nodes[j].gradient[b] = 0.0;
+            model->nodes[j].visited = 0;
+            model->nodes[j].dropped = 0;
         }
     }
     return 0;
@@ -928,49 +928,49 @@ double he_init(int fan_in)
     return std * sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
 }
 
-int *create_softmax_layer(Model *model, int *input_slots, int num_outputs)
+int *create_softmax_layer(Model *model, int *input_nodes, int num_outputs)
 {
 
-    int *exp_slots = malloc(num_outputs * sizeof(int));
+    int *exp_nodes = malloc(num_outputs * sizeof(int));
 
     for (int i = 0; i < num_outputs; i++)
     {
-        exp_slots[i] = create_operation_slot(model, EXP, wrap_value_in_array(input_slots[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
+        exp_nodes[i] = create_operation_node(model, EXP, wrap_value_in_array(input_nodes[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    int sum_slot = exp_slots[0];
+    int sum_node = exp_nodes[0];
     for (int i = 1; i < num_outputs; i++)
     {
-        sum_slot = create_operation_slot(model, ADD, wrap_in_array(sum_slot, exp_slots[i]), 2, (int[]){BATCH_SIZE, 1}, 2);
+        sum_node = create_operation_node(model, ADD, wrap_in_array(sum_node, exp_nodes[i]), 2, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    int *softmax_slots = malloc(num_outputs * sizeof(int));
+    int *softmax_nodes = malloc(num_outputs * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
-        softmax_slots[i] = create_operation_slot(model, DIV, wrap_in_array(exp_slots[i], sum_slot), 2, (int[]){BATCH_SIZE, 1}, 2);
+        softmax_nodes[i] = create_operation_node(model, DIV, wrap_in_array(exp_nodes[i], sum_node), 2, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    return softmax_slots;
+    return softmax_nodes;
 }
 
-int create_cross_entropy_loss(Model *model, int *target_slots, int *softmax_slots, int num_outputs)
+int create_cross_entropy_loss(Model *model, int *target_nodes, int *softmax_nodes, int num_outputs)
 {
-    int *log_slots = malloc(num_outputs * sizeof(int));
-    int *product_slots = malloc(num_outputs * sizeof(int));
+    int *log_nodes = malloc(num_outputs * sizeof(int));
+    int *product_nodes = malloc(num_outputs * sizeof(int));
 
     for (int i = 0; i < num_outputs; i++)
     {
-        int log_softmax = create_operation_slot(model, LOG, wrap_value_in_array(softmax_slots[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
-        log_slots[i] = log_softmax;
-        product_slots[i] = create_operation_slot(model, MULTIPLY, wrap_in_array(target_slots[i], log_softmax), 2, (int[]){BATCH_SIZE, 1}, 2);
+        int log_softmax = create_operation_node(model, LOG, wrap_value_in_array(softmax_nodes[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
+        log_nodes[i] = log_softmax;
+        product_nodes[i] = create_operation_node(model, MULTIPLY, wrap_in_array(target_nodes[i], log_softmax), 2, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    int sum_cross_entropy = create_operation_slot(model, ADD, product_slots, num_outputs, (int[]){BATCH_SIZE, 1}, 2);
-    int neg_cross_entropy = create_operation_slot(model, NEG, wrap_value_in_array(sum_cross_entropy), 1, (int[]){BATCH_SIZE, 1}, 2);
+    int sum_cross_entropy = create_operation_node(model, ADD, product_nodes, num_outputs, (int[]){BATCH_SIZE, 1}, 2);
+    int neg_cross_entropy = create_operation_node(model, NEG, wrap_value_in_array(sum_cross_entropy), 1, (int[]){BATCH_SIZE, 1}, 2);
     return neg_cross_entropy;
 }
 
-int *create_multihead_attention_layer(Model *model, int *input_slots, int num_inputs, int d_model, int num_heads, double dropout_rate)
+int *create_multihead_attention_layer(Model *model, int *input_nodes, int num_inputs, int d_model, int num_heads, double dropout_rate)
 {
     int head_dim = d_model / num_heads;
     if (d_model % num_heads != 0)
@@ -990,16 +990,16 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
 
         for (int i = 0; i < head_dim * num_inputs; i++)
         {
-            Q_weights[h][i] = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
-            K_weights[h][i] = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
-            V_weights[h][i] = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+            Q_weights[h][i] = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+            K_weights[h][i] = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+            V_weights[h][i] = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
 
             double weight_init = he_init(num_inputs);
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                set_slot_value_by_position(model, Q_weights[h][i], (int[]){b, 0}, 2, weight_init);
-                set_slot_value_by_position(model, K_weights[h][i], (int[]){b, 0}, 2, weight_init);
-                set_slot_value_by_position(model, V_weights[h][i], (int[]){b, 0}, 2, weight_init);
+                set_node_value_by_position(model, Q_weights[h][i], (int[]){b, 0}, 2, weight_init);
+                set_node_value_by_position(model, K_weights[h][i], (int[]){b, 0}, 2, weight_init);
+                set_node_value_by_position(model, V_weights[h][i], (int[]){b, 0}, 2, weight_init);
             }
         }
     }
@@ -1020,38 +1020,38 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
                 int q_sum = -1, k_sum = -1, v_sum = -1;
                 for (int k = 0; k < num_inputs; k++)
                 {
-                    int q_mul = create_operation_slot(model, MULTIPLY, wrap_in_array(input_slots[k], Q_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
-                    int k_mul = create_operation_slot(model, MULTIPLY, wrap_in_array(input_slots[k], K_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
-                    int v_mul = create_operation_slot(model, MULTIPLY, wrap_in_array(input_slots[k], V_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int q_mul = create_operation_node(model, MULTIPLY, wrap_in_array(input_nodes[k], Q_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int k_mul = create_operation_node(model, MULTIPLY, wrap_in_array(input_nodes[k], K_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int v_mul = create_operation_node(model, MULTIPLY, wrap_in_array(input_nodes[k], V_weights[h][j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
 
                     if (q_sum == -1)
                         q_sum = q_mul;
                     else
-                        q_sum = create_operation_slot(model, ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                        q_sum = create_operation_node(model, ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
 
                     if (k_sum == -1)
                         k_sum = k_mul;
                     else
-                        k_sum = create_operation_slot(model, ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                        k_sum = create_operation_node(model, ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
 
                     if (v_sum == -1)
                         v_sum = v_mul;
                     else
-                        v_sum = create_operation_slot(model, ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                        v_sum = create_operation_node(model, ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
                 }
                 Q[h][i * head_dim + j] = q_sum;
                 K[h][i * head_dim + j] = k_sum;
                 V[h][i * head_dim + j] = v_sum;
-                int q_dropout = create_operation_slot(model, DROPOUT, wrap_value_in_array(Q[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
-                model->slots[q_dropout].dropout_rate = dropout_rate;
+                int q_dropout = create_operation_node(model, DROPOUT, wrap_value_in_array(Q[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
+                model->nodes[q_dropout].dropout_rate = dropout_rate;
                 Q[h][i * head_dim + j] = q_dropout;
 
-                int k_dropout = create_operation_slot(model, DROPOUT, wrap_value_in_array(K[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
-                model->slots[k_dropout].dropout_rate = dropout_rate;
+                int k_dropout = create_operation_node(model, DROPOUT, wrap_value_in_array(K[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
+                model->nodes[k_dropout].dropout_rate = dropout_rate;
                 K[h][i * head_dim + j] = k_dropout;
 
-                int v_dropout = create_operation_slot(model, DROPOUT, wrap_value_in_array(V[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
-                model->slots[v_dropout].dropout_rate = dropout_rate;
+                int v_dropout = create_operation_node(model, DROPOUT, wrap_value_in_array(V[h][i * head_dim + j]), 1, (int[]){BATCH_SIZE, 1}, 2);
+                model->nodes[v_dropout].dropout_rate = dropout_rate;
                 V[h][i * head_dim + j] = v_dropout;
             }
         }
@@ -1072,27 +1072,27 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
                 {
                     int q_idx = i * head_dim + k;
                     int k_idx = j * head_dim + k;
-                    int mul = create_operation_slot(model, MULTIPLY, wrap_in_array(Q[h][q_idx], K[h][k_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int mul = create_operation_node(model, MULTIPLY, wrap_in_array(Q[h][q_idx], K[h][k_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
                     if (sum == -1)
                         sum = mul;
                     else
-                        sum = create_operation_slot(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                        sum = create_operation_node(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
                 }
                 double scale = sqrt(head_dim);
-                int scale_slot = create_value_slot(model, 0, (int[]){BATCH_SIZE, 1}, 2);
+                int scale_node = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
                 for (int b = 0; b < BATCH_SIZE; b++)
-                    set_slot_value_by_position(model, scale_slot, (int[]){b, 0}, 2, scale);
+                    set_node_value_by_position(model, scale_node, (int[]){b, 0}, 2, scale);
 
                 attention_scores[i * seq_length + j] =
-                    create_operation_slot(model, DIV, wrap_in_array(sum, scale_slot), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    create_operation_node(model, DIV, wrap_in_array(sum, scale_node), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
         }
 
         int *dropout_scores = malloc(seq_length * seq_length * sizeof(int));
         for (int i = 0; i < seq_length * seq_length; i++)
         {
-            dropout_scores[i] = create_operation_slot(model, DROPOUT, wrap_value_in_array(attention_scores[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
-            model->slots[dropout_scores[i]].dropout_rate = dropout_rate;
+            dropout_scores[i] = create_operation_node(model, DROPOUT, wrap_value_in_array(attention_scores[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
+            model->nodes[dropout_scores[i]].dropout_rate = dropout_rate;
         }
 
         int *attention_weights = malloc(seq_length * seq_length * sizeof(int));
@@ -1114,11 +1114,11 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
                 for (int j = 0; j < seq_length; j++)
                 {
                     int v_idx = j * head_dim + k;
-                    int mul = create_operation_slot(model, MULTIPLY, wrap_in_array(attention_weights[i * seq_length + j], V[h][v_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    int mul = create_operation_node(model, MULTIPLY, wrap_in_array(attention_weights[i * seq_length + j], V[h][v_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
                     if (sum == -1)
                         sum = mul;
                     else
-                        sum = create_operation_slot(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                        sum = create_operation_node(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
                 }
                 context[i * d_model + h * head_dim + k] = sum;
             }
@@ -1140,7 +1140,7 @@ int *create_multihead_attention_layer(Model *model, int *input_slots, int num_in
 }
 
 // not used, keeping to to compare
-int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int d_model)
+int *create_attention_layer(Model *model, int *input_nodes, int num_inputs, int d_model)
 {
     int Q_weights[d_model * num_inputs];
     int K_weights[d_model * num_inputs];
@@ -1148,16 +1148,16 @@ int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int 
 
     for (int i = 0; i < d_model * num_inputs; i++)
     {
-        Q_weights[i] = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
-        K_weights[i] = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
-        V_weights[i] = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+        Q_weights[i] = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+        K_weights[i] = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+        V_weights[i] = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
 
         double weight_init = he_init(num_inputs);
         for (int b = 0; b < BATCH_SIZE; b++)
         {
-            set_slot_value_by_position(model, Q_weights[i], (int[]){b, 0}, 2, weight_init);
-            set_slot_value_by_position(model, K_weights[i], (int[]){b, 0}, 2, weight_init);
-            set_slot_value_by_position(model, V_weights[i], (int[]){b, 0}, 2, weight_init);
+            set_node_value_by_position(model, Q_weights[i], (int[]){b, 0}, 2, weight_init);
+            set_node_value_by_position(model, K_weights[i], (int[]){b, 0}, 2, weight_init);
+            set_node_value_by_position(model, V_weights[i], (int[]){b, 0}, 2, weight_init);
         }
     }
 
@@ -1172,24 +1172,24 @@ int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int 
             int q_sum = -1, k_sum = -1, v_sum = -1;
             for (int k = 0; k < num_inputs; k++)
             {
-                int q_mul = create_operation_slot(model, MULTIPLY, wrap_in_array(input_slots[k], Q_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
-                int k_mul = create_operation_slot(model, MULTIPLY, wrap_in_array(input_slots[k], K_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
-                int v_mul = create_operation_slot(model, MULTIPLY, wrap_in_array(input_slots[k], V_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                int q_mul = create_operation_node(model, MULTIPLY, wrap_in_array(input_nodes[k], Q_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                int k_mul = create_operation_node(model, MULTIPLY, wrap_in_array(input_nodes[k], K_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                int v_mul = create_operation_node(model, MULTIPLY, wrap_in_array(input_nodes[k], V_weights[j * num_inputs + k]), 2, (int[]){BATCH_SIZE, 1}, 2);
 
                 if (q_sum == -1)
                     q_sum = q_mul;
                 else
-                    q_sum = create_operation_slot(model, ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    q_sum = create_operation_node(model, ADD, wrap_in_array(q_sum, q_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
 
                 if (k_sum == -1)
                     k_sum = k_mul;
                 else
-                    k_sum = create_operation_slot(model, ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    k_sum = create_operation_node(model, ADD, wrap_in_array(k_sum, k_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
 
                 if (v_sum == -1)
                     v_sum = v_mul;
                 else
-                    v_sum = create_operation_slot(model, ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    v_sum = create_operation_node(model, ADD, wrap_in_array(v_sum, v_mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             Q[i * d_model + j] = q_sum;
             K[i * d_model + j] = k_sum;
@@ -1209,19 +1209,19 @@ int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int 
             {
                 int q_idx = i * d_model + k;
                 int k_idx = j * d_model + k;
-                int mul = create_operation_slot(model, MULTIPLY, wrap_in_array(Q[q_idx], K[k_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                int mul = create_operation_node(model, MULTIPLY, wrap_in_array(Q[q_idx], K[k_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
                 if (sum == -1)
                     sum = mul;
                 else
-                    sum = create_operation_slot(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    sum = create_operation_node(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             double scale = sqrt(d_model);
-            int scale_slot = create_value_slot(model, 0, (int[]){BATCH_SIZE, 1}, 2);
+            int scale_node = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
             for (int b = 0; b < BATCH_SIZE; b++)
-                set_slot_value_by_position(model, scale_slot, (int[]){b, 0}, 2, scale);
+                set_node_value_by_position(model, scale_node, (int[]){b, 0}, 2, scale);
 
             attention_scores[i * seq_length + j] =
-                create_operation_slot(model, DIV, wrap_in_array(sum, scale_slot), 2, (int[]){BATCH_SIZE, 1}, 2);
+                create_operation_node(model, DIV, wrap_in_array(sum, scale_node), 2, (int[]){BATCH_SIZE, 1}, 2);
         }
     }
 
@@ -1245,11 +1245,11 @@ int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int 
             for (int j = 0; j < seq_length; j++)
             {
                 int v_idx = j * d_model + k;
-                int mul = create_operation_slot(model, MULTIPLY, wrap_in_array(attention_weights[i * seq_length + j], V[v_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
+                int mul = create_operation_node(model, MULTIPLY, wrap_in_array(attention_weights[i * seq_length + j], V[v_idx]), 2, (int[]){BATCH_SIZE, 1}, 2);
                 if (sum == -1)
                     sum = mul;
                 else
-                    sum = create_operation_slot(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                    sum = create_operation_node(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
             context[i * d_model + k] = sum;
             // printf("Context: %d\n", context[i * d_model + k]);
@@ -1261,22 +1261,22 @@ int *create_attention_layer(Model *model, int *input_slots, int num_inputs, int 
     return context;
 }
 
-int *create_feedforward_network(Model *model, int *prev_layer_slots, int prev_layer_size, int curr_layer_size, double dropout_rate)
+int *create_feedforward_network(Model *model, int *prev_layer_nodes, int prev_layer_size, int curr_layer_size, double dropout_rate)
 {
-    int *curr_layer_slots = malloc(curr_layer_size * sizeof(int));
+    int *curr_layer_nodes = malloc(curr_layer_size * sizeof(int));
 
     for (int neuron = 0; neuron < curr_layer_size; neuron++)
     {
         int sum = -1;
         for (int prev = 0; prev < prev_layer_size; prev++)
         {
-            int weight = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
-            for (int b = 0; b < model->slots[weight].size; b++)
+            int weight = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+            for (int b = 0; b < model->nodes[weight].size; b++)
             {
                 double weight_init = he_init(prev_layer_size);
-                set_slot_value_by_position(model, weight, (int[]){b, 0}, 2, weight_init);
+                set_node_value_by_position(model, weight, (int[]){b, 0}, 2, weight_init);
             }
-            int mul = create_operation_slot(model, MULTIPLY, wrap_in_array(prev_layer_slots[prev], weight), 2, (int[]){BATCH_SIZE, 1}, 2);
+            int mul = create_operation_node(model, MULTIPLY, wrap_in_array(prev_layer_nodes[prev], weight), 2, (int[]){BATCH_SIZE, 1}, 2);
 
             if (sum == -1)
             {
@@ -1284,47 +1284,52 @@ int *create_feedforward_network(Model *model, int *prev_layer_slots, int prev_la
             }
             else
             {
-                sum = create_operation_slot(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
+                sum = create_operation_node(model, ADD, wrap_in_array(sum, mul), 2, (int[]){BATCH_SIZE, 1}, 2);
             }
         }
 
-        int bias = create_value_slot(model, 1, (int[]){BATCH_SIZE, 1}, 2);
-        int biased = create_operation_slot(model, ADD, wrap_in_array(sum, bias), 2, (int[]){BATCH_SIZE, 1}, 2);
+        int bias = create_value_node(model, 1, (int[]){BATCH_SIZE, 1}, 2);
+        int biased = create_operation_node(model, ADD, wrap_in_array(sum, bias), 2, (int[]){BATCH_SIZE, 1}, 2);
 
-        int dropout_slot = create_operation_slot(model, DROPOUT, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
-        model->slots[dropout_slot].dropout_rate = dropout_rate;
+        int dropout_node = create_operation_node(model, DROPOUT, wrap_value_in_array(biased), 1, (int[]){BATCH_SIZE, 1}, 2);
+        model->nodes[dropout_node].dropout_rate = dropout_rate;
 
-        curr_layer_slots[neuron] = create_operation_slot(model, RELU, wrap_value_in_array(dropout_slot), 1, (int[]){BATCH_SIZE, 1}, 2);
+        curr_layer_nodes[neuron] = create_operation_node(model, RELU, wrap_value_in_array(dropout_node), 1, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    return curr_layer_slots;
+    return curr_layer_nodes;
 }
 
 Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_size, int num_heads, int num_blocks, int mlp_size, int attention_size, double dropout_rate)
 {
     Model *model = (Model *)malloc(sizeof(Model));
 
-    model->slots = (Slot *)malloc(MAX_SLOTS * sizeof(Slot));
+    model->nodes = (Node *)malloc(MAX_nodeS * sizeof(Node));
 
     int *prev_layer = NULL;
     int *curr_layer = NULL;
 
     prev_layer = malloc(num_inputs * sizeof(int));
 
-    int *input_slots = prev_layer;
+    int *input_nodes = prev_layer;
     for (int i = 0; i < num_inputs; i++)
     {
-        prev_layer[i] = create_value_slot(model, 0, (int[]){BATCH_SIZE, 1}, 2);
+        prev_layer[i] = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
     }
 
     // embedding layer (ff based)
-    prev_layer = create_feedforward_network(model, prev_layer, num_inputs, embed_size, dropout_rate);
+    prev_layer = create_feedforward_network(model, prev_layer, num_inputs, embed_size, 0.0); // TODO: not doing dropouts here, but should i?
 
     int prev_prev_layer_size = num_inputs;
     int prev_layer_size = embed_size;
 
     for (int i = 0; i < num_blocks; i++)
     {
+
+        // since I am not like creating actual tensors with dimensional info, that forced me to
+        // compute the size of input exactly before creating the layer hence
+        // you will see things like prev_prev_layer_size * prev_layer_size, which is the size of the input
+        // TODO: improve this!
 
         curr_layer = create_multihead_attention_layer(model, prev_layer, prev_layer_size, attention_size, num_heads, dropout_rate);
         prev_prev_layer_size = prev_layer_size;
@@ -1341,21 +1346,21 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
 
     curr_layer = create_feedforward_network(model, prev_layer, mlp_size, vocab_size, dropout_rate);
 
-    int *output_slots = curr_layer;
-    int *softmax_slots = create_softmax_layer(model, output_slots, num_outputs);
+    int *output_nodes = curr_layer;
+    int *softmax_nodes = create_softmax_layer(model, output_nodes, num_outputs);
 
-    int *target_slots = (int *)malloc(num_outputs * sizeof(int));
+    int *target_nodes = (int *)malloc(num_outputs * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
-        target_slots[i] = create_value_slot(model, 0, (int[]){BATCH_SIZE, 1}, 2);
+        target_nodes[i] = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
     }
-    int loss_slot = create_cross_entropy_loss(model, target_slots, softmax_slots, num_outputs);
+    int loss_node = create_cross_entropy_loss(model, target_nodes, softmax_nodes, num_outputs);
 
-    model->input_slots = input_slots;
-    model->output_slots = output_slots;
-    model->loss_slot = loss_slot;
-    model->softmax_slots = softmax_slots;
-    model->target_slots = target_slots;
+    model->input_nodes = input_nodes;
+    model->output_nodes = output_nodes;
+    model->loss_node = loss_node;
+    model->softmax_nodes = softmax_nodes;
+    model->target_nodes = target_nodes;
     model->num_inputs = num_inputs;
     model->num_outputs = num_outputs;
     model->embed_size = embed_size;
@@ -1363,12 +1368,12 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     return model;
 }
 
-void inference(Model *model, const char *input_string, int num_inputs, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_slot, int num_outputs, int *softmax_slots)
+void inference(Model *model, const char *input_string, int num_inputs, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_node, int num_outputs, int *softmax_nodes)
 {
     int seq_len = num_inputs / vocab_size;
     int max_index = -1;
 
-    double *sequence = preprocess_string(input_string, token_to_index, merges, num_merges, vocab_size, seq_len); // preprocess the input string
+    double *sequence = preprocess_string(input_string, token_to_index, merges, num_merges, vocab_size, seq_len); // preprocess the input string to BPE tokens
 
     printf("\n%s", input_string);
     for (int p = 0; p < 50; p++)
@@ -1386,10 +1391,10 @@ void inference(Model *model, const char *input_string, int num_inputs, int *inde
         {
             double val = sequence[j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
             val += positional_encoding[j];
-            set_slot_value_by_position(model, j, (int[]){0, 0}, 2, val);
+            set_node_value_by_position(model, j, (int[]){0, 0}, 2, val);
         }
 
-        compute_graph(model, loss_slot);
+        compute_graph(model, loss_node);
 
         double temperature = 0.6;
         double softmax_values[num_outputs];
@@ -1397,7 +1402,7 @@ void inference(Model *model, const char *input_string, int num_inputs, int *inde
 
         for (int j = 0; j < num_outputs; j++)
         {
-            double raw_value = get_slot_value_by_position(model, softmax_slots[j], (int[]){0, 0}, 2);
+            double raw_value = get_node_value_by_position(model, softmax_nodes[j], (int[]){0, 0}, 2);
             softmax_values[j] = exp(raw_value / temperature);
             exp_sum += softmax_values[j];
         }
@@ -1443,11 +1448,11 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
     int num_outputs = model->num_outputs;
     int num_inputs = model->num_inputs;
     int embed_size = model->embed_size;
-    int *input_slots = model->input_slots;
-    int *output_slots = model->output_slots;
-    int loss_slot = model->loss_slot;
-    int *softmax_slots = model->softmax_slots;
-    int *target_slots = model->target_slots;
+    int *input_nodes = model->input_nodes;
+    int *output_nodes = model->output_nodes;
+    int loss_node = model->loss_node;
+    int *softmax_nodes = model->softmax_nodes;
+    int *target_nodes = model->target_nodes;
 
     detect_orphans(model);
     // adam related
@@ -1476,7 +1481,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
                 {
                     double val = inputs[i + b][j / vocab_size] == j % vocab_size ? 1.0 : 0.0;
                     val += positional_encoding[j];
-                    set_slot_value_by_position(model, j, (int[]){b, 0}, 2,
+                    set_node_value_by_position(model, j, (int[]){b, 0}, 2,
                                                val);
                 }
             }
@@ -1488,52 +1493,52 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
 
                     if (l == labels[i + b])
                     {
-                        set_slot_value_by_position(model, target_slots[l], (int[]){b, 0}, 2, 1);
+                        set_node_value_by_position(model, target_nodes[l], (int[]){b, 0}, 2, 1);
                     }
                     else
                     {
-                        set_slot_value_by_position(model, target_slots[l], (int[]){b, 0}, 2, 0);
+                        set_node_value_by_position(model, target_nodes[l], (int[]){b, 0}, 2, 0);
                     }
                 }
             }
 
-            compute_graph(model, loss_slot);
+            compute_graph(model, loss_node);
 
             for (int b = 0; b < BATCH_SIZE; b++)
             {
-                total_loss += get_slot_value_by_position(model, loss_slot, (int[]){b, 0}, 2);
-                model->slots[loss_slot].gradient[b] = 1.0;
+                total_loss += get_node_value_by_position(model, loss_node, (int[]){b, 0}, 2);
+                model->nodes[loss_node].gradient[b] = 1.0;
             }
 
-            compute_grad(model, loss_slot);
+            compute_grad(model, loss_node);
 
-            for (int j = 0; j < slot_counter; j++)
+            for (int j = 0; j < node_counter; j++)
             {
-                if (model->slots[j].learnable_param == 1)
+                if (model->nodes[j].learnable_param == 1)
                 {
 
-                    if (model->slots[j].adam_m == NULL)
+                    if (model->nodes[j].adam_m == NULL)
                     {
-                        model->slots[j].adam_m = (double *)calloc(model->slots[j].size, sizeof(double));
-                        model->slots[j].adam_v = (double *)calloc(model->slots[j].size, sizeof(double));
+                        model->nodes[j].adam_m = (double *)calloc(model->nodes[j].size, sizeof(double));
+                        model->nodes[j].adam_v = (double *)calloc(model->nodes[j].size, sizeof(double));
                     }
 
-                    for (int b = 0; b < model->slots[j].size; b++)
+                    for (int b = 0; b < model->nodes[j].size; b++)
                     {
-                        model->slots[j].adam_m[b] = beta1 * model->slots[j].adam_m[b] + (1.0 - beta1) * model->slots[j].gradient[b];
-                        model->slots[j].adam_v[b] = beta2 * model->slots[j].adam_v[b] + (1.0 - beta2) * model->slots[j].gradient[b] * model->slots[j].gradient[b];
+                        model->nodes[j].adam_m[b] = beta1 * model->nodes[j].adam_m[b] + (1.0 - beta1) * model->nodes[j].gradient[b];
+                        model->nodes[j].adam_v[b] = beta2 * model->nodes[j].adam_v[b] + (1.0 - beta2) * model->nodes[j].gradient[b] * model->nodes[j].gradient[b];
 
-                        double m_hat = model->slots[j].adam_m[b] / (1.0 - pow(beta1, epoch + 1));
-                        double v_hat = model->slots[j].adam_v[b] / (1.0 - pow(beta2, epoch + 1));
+                        double m_hat = model->nodes[j].adam_m[b] / (1.0 - pow(beta1, epoch + 1));
+                        double v_hat = model->nodes[j].adam_v[b] / (1.0 - pow(beta2, epoch + 1));
 
-                        set_slot_value(model, j, b, get_slot_value(model, j, b) - learning_rate * m_hat / (sqrt(v_hat) + epsilon));
+                        set_node_value(model, j, b, get_node_value(model, j, b) - learning_rate * m_hat / (sqrt(v_hat) + epsilon));
                     }
                 }
             }
             printf("Epoch %d, Batch %d/ %d \n", epoch + 1, i / BATCH_SIZE, num_samples / BATCH_SIZE);
         }
 
-        inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_slot, num_outputs, softmax_slots);
+        inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_node, num_outputs, softmax_nodes);
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
 
