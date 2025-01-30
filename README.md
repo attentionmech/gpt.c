@@ -11,7 +11,9 @@ Implementing decoder-only GPT style transformer in C
 
 ![demo](assets/demo.gif)
 
+the computational graph can be plotted as well using graphviz (since it's all in slots array)
 
+<img src="assets/graphviz.svg" />
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
