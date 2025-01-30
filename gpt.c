@@ -78,7 +78,7 @@ typedef struct
     int *input_nodes;
     int *output_nodes;
     int *target_nodes;
-    int *softMAX_NODES;
+    int *softmax_nodes;
     int loss_node;
     int num_inputs;
     int num_outputs;
@@ -948,23 +948,23 @@ int *create_softmax_layer(Model *model, int *input_nodes, int num_outputs)
         sum_node = create_operation_node(model, ADD, wrap_in_array(sum_node, exp_nodes[i]), 2, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    int *softMAX_NODES = malloc(num_outputs * sizeof(int));
+    int *softmax_nodes = malloc(num_outputs * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
-        softMAX_NODES[i] = create_operation_node(model, DIV, wrap_in_array(exp_nodes[i], sum_node), 2, (int[]){BATCH_SIZE, 1}, 2);
+        softmax_nodes[i] = create_operation_node(model, DIV, wrap_in_array(exp_nodes[i], sum_node), 2, (int[]){BATCH_SIZE, 1}, 2);
     }
 
-    return softMAX_NODES;
+    return softmax_nodes;
 }
 
-int create_cross_entropy_loss(Model *model, int *target_nodes, int *softMAX_NODES, int num_outputs)
+int create_cross_entropy_loss(Model *model, int *target_nodes, int *softmax_nodes, int num_outputs)
 {
     int *log_nodes = malloc(num_outputs * sizeof(int));
     int *product_nodes = malloc(num_outputs * sizeof(int));
 
     for (int i = 0; i < num_outputs; i++)
     {
-        int log_softmax = create_operation_node(model, LOG, wrap_value_in_array(softMAX_NODES[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
+        int log_softmax = create_operation_node(model, LOG, wrap_value_in_array(softmax_nodes[i]), 1, (int[]){BATCH_SIZE, 1}, 2);
         log_nodes[i] = log_softmax;
         product_nodes[i] = create_operation_node(model, MULTIPLY, wrap_in_array(target_nodes[i], log_softmax), 2, (int[]){BATCH_SIZE, 1}, 2);
     }
@@ -1351,19 +1351,19 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     curr_layer = create_feedforward_network(model, prev_layer, mlp_size, vocab_size, dropout_rate);
 
     int *output_nodes = curr_layer;
-    int *softMAX_NODES = create_softmax_layer(model, output_nodes, num_outputs);
+    int *softmax_nodes = create_softmax_layer(model, output_nodes, num_outputs);
 
     int *target_nodes = (int *)malloc(num_outputs * sizeof(int));
     for (int i = 0; i < num_outputs; i++)
     {
         target_nodes[i] = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
     }
-    int loss_node = create_cross_entropy_loss(model, target_nodes, softMAX_NODES, num_outputs);
+    int loss_node = create_cross_entropy_loss(model, target_nodes, softmax_nodes, num_outputs);
 
     model->input_nodes = input_nodes;
     model->output_nodes = output_nodes;
     model->loss_node = loss_node;
-    model->softMAX_NODES = softMAX_NODES;
+    model->softmax_nodes = softmax_nodes;
     model->target_nodes = target_nodes;
     model->num_inputs = num_inputs;
     model->num_outputs = num_outputs;
@@ -1372,7 +1372,7 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     return model;
 }
 
-void inference(Model *model, const char *input_string, int num_inputs, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_node, int num_outputs, int *softMAX_NODES)
+void inference(Model *model, const char *input_string, int num_inputs, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, double *positional_encoding, int loss_node, int num_outputs, int *softmax_nodes)
 {
     int seq_len = num_inputs / vocab_size;
     int max_index = -1;
@@ -1406,7 +1406,7 @@ void inference(Model *model, const char *input_string, int num_inputs, int *inde
 
         for (int j = 0; j < num_outputs; j++)
         {
-            double raw_value = get_node_value_by_position(model, softMAX_NODES[j], (int[]){0, 0}, 2);
+            double raw_value = get_node_value_by_position(model, softmax_nodes[j], (int[]){0, 0}, 2);
             softmax_values[j] = exp(raw_value / temperature);
             exp_sum += softmax_values[j];
         }
@@ -1455,7 +1455,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
     int *input_nodes = model->input_nodes;
     int *output_nodes = model->output_nodes;
     int loss_node = model->loss_node;
-    int *softMAX_NODES = model->softMAX_NODES;
+    int *softmax_nodes = model->softmax_nodes;
     int *target_nodes = model->target_nodes;
 
     detect_orphans(model);
@@ -1542,7 +1542,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
             printf("Epoch %d, Batch %d/ %d \n", epoch + 1, i / BATCH_SIZE, num_samples / BATCH_SIZE);
         }
 
-        inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_node, num_outputs, softMAX_NODES);
+        inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_node, num_outputs, softmax_nodes);
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
 
