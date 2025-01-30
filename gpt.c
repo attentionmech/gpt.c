@@ -6,11 +6,11 @@
 #include <time.h>
 #include <string.h>
 
-#define BATCH_SIZE 50
+#define BATCH_SIZE 10
 #define MAX_NODES 10000000
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 #define MAX_FILE_SIZE 10000
-#define MAX_SAMPLES 1000
+#define MAX_SAMPLES 100
 
 // bpe related
 // byte pair encoder just takes your characters and
@@ -1310,45 +1310,29 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
 
     model->nodes = (Node *)malloc(MAX_NODES * sizeof(Node));
 
-    int *prev_layer = NULL;
     int *curr_layer = NULL;
 
-    prev_layer = malloc(num_inputs * sizeof(int));
+    curr_layer = malloc(num_inputs * sizeof(int));
 
-    int *input_nodes = prev_layer;
+    int *input_nodes = curr_layer;
     for (int i = 0; i < num_inputs; i++)
     {
-        prev_layer[i] = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
+        curr_layer[i] = create_value_node(model, 0, (int[]){BATCH_SIZE, 1}, 2);
     }
 
     // embedding layer (ff based)
-    prev_layer = create_feedforward_network(model, prev_layer, num_inputs, embed_size, 0.0); // TODO: not doing dropouts here, but should i?
+    curr_layer = create_feedforward_network(model, curr_layer, num_inputs, embed_size, 0.0); // TODO: not doing dropouts here, but should i?
 
-    int prev_prev_layer_size = num_inputs;
-    int prev_layer_size = embed_size;
+    // doing another mapping so that the symmetry is better to apply residuals
+    curr_layer = create_feedforward_network(model, curr_layer, embed_size, mlp_size, dropout_rate); // TODO: not doing dropouts here, but should i?
 
     for (int i = 0; i < num_blocks; i++)
     {
-
-        // since I am not like creating actual tensors with dimensional info, that forced me to
-        // compute the size of input exactly before creating the layer hence
-        // you will see things like prev_prev_layer_size * prev_layer_size, which is the size of the input
-        // TODO: improve this!
-
-        curr_layer = create_multihead_attention_layer(model, prev_layer, prev_layer_size, attention_size, num_heads, dropout_rate);
-        prev_prev_layer_size = prev_layer_size;
-        prev_layer_size = attention_size;
-
-        prev_layer = curr_layer;
-
-        curr_layer = create_feedforward_network(model, prev_layer, prev_prev_layer_size * prev_layer_size, mlp_size, dropout_rate);
-        prev_prev_layer_size = prev_layer_size;
-        prev_layer_size = mlp_size;
-
-        prev_layer = curr_layer;
+        curr_layer = create_multihead_attention_layer(model, curr_layer, mlp_size, attention_size, num_heads, dropout_rate);
+        curr_layer = create_feedforward_network(model, curr_layer, mlp_size * attention_size, mlp_size, dropout_rate);
     }
 
-    curr_layer = create_feedforward_network(model, prev_layer, mlp_size, vocab_size, dropout_rate);
+    curr_layer = create_feedforward_network(model, curr_layer, mlp_size, vocab_size, dropout_rate);
 
     int *output_nodes = curr_layer;
     int *softmax_nodes = create_softmax_layer(model, output_nodes, num_outputs);
@@ -1630,12 +1614,12 @@ int main()
 
     double learning_rate = 0.01;
     int num_inputs = vocab_size * seq_len;
-    int embed_size = 32;
-    int num_heads = 4;
+    int embed_size = 8;
+    int num_heads = 2;
     int num_outputs = vocab_size;
     int num_blocks = 4;
     int mlp_size = 16;
-    int attention_size = 16;
+    int attention_size = 8;
     double dropout_rate = 0.1;
 
     Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size, dropout_rate);
