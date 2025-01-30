@@ -1,5 +1,11 @@
 # gpt.c
 
+
+# Updates
+
+- Currently it's very slow, need update the codebase with CUDA; the last training run is present in assets/train.log
+
+
 Implementing decoder-only GPT style transformer in C
 
 ![demo](assets/demo.gif)
