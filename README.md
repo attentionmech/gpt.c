@@ -1,12 +1,5 @@
 # gpt.c
 
-
-# Updates
-
-- Currently it's very slow, need update the codebase with CUDA; the last training run is present in assets/train.log
-- loss graph visualisation: [loss](https://x.com/attentionmech/status/1884564917304357127)
-
-
 Implementing decoder-only GPT style transformer in C
 
 ![demo](assets/demo.gif)
@@ -14,6 +7,19 @@ Implementing decoder-only GPT style transformer in C
 the computational graph can be plotted as well using graphviz (since it's all in slots array)
 
 <img src="assets/graphviz.svg" />
+
+### How to Run
+
+dataset is within the repo itself
+
+`gcc gpt.c; ./a.out`
+
+### Development
+
+- Currently it's very slow, need update the codebase with CUDA; the last training run is present in assets/train.log
+- loss graph visualisation: [loss](https://x.com/attentionmech/status/1884564917304357127)
+
+#### Tasks:
 
 - [X] Implement matrix operations
 - [X] Build a basic feed-forward neural network  
@@ -40,7 +46,7 @@ the computational graph can be plotted as well using graphviz (since it's all in
 - [X] adam optim
 - [ ] add layer norms, dropout, and residuals
 
-Current State:
+#### issues encountered:
 
 - ~~too much object reallocation, design needs to change~~
 - ~~Gradients are not converging properly~~
@@ -50,6 +56,3 @@ Current State:
 - ~~vanishing gradients after adding attention;~~
 
 
-How to Run:
-
-`gcc gpt.c; ./a.out`
