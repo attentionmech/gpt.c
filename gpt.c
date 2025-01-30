@@ -65,6 +65,7 @@ typedef struct
     double *adam_m;
     double *adam_v;
     double dropout_rate;
+    bool dropped;
 } Slot;
 
 typedef struct
@@ -474,6 +475,9 @@ int create_value_slot(Model *model, int learnable_param, int *shape, int num_dim
     model->slots[slot_counter].num_dependencies = 0;
     model->slots[slot_counter].learnable_param = learnable_param;
 
+    model->slots[slot_counter].dropped = false;
+    model->slots[slot_counter].dropout_rate = 0;
+
     return increment_slot();
 }
 
@@ -515,6 +519,9 @@ int create_operation_slot(Model *model, OperationType op, int *dep, int num_depe
     model->slots[slot_counter].gradient = (double *)malloc(total_size * sizeof(double));
 
     model->slots[slot_counter].learnable_param = 1;
+
+    model->slots[slot_counter].dropped = false;
+    model->slots[slot_counter].dropout_rate = 0;
 
     return increment_slot();
 }
@@ -591,21 +598,6 @@ double _mul(double **list, int b, int length)
     }
 
     return product;
-}
-
-void dropout_operation(double *input, double *output, int size, double dropout_rate)
-{
-    for (int i = 0; i < size; ++i)
-    {
-        if ((double)rand() / RAND_MAX > dropout_rate)
-        {
-            output[i] = input[i];
-        }
-        else
-        {
-            output[i] = 0.0;
-        }
-    }
 }
 
 double *compute_graph(Model *model, int slot)
@@ -711,7 +703,19 @@ double *compute_graph(Model *model, int slot)
             }
             break;
         case DROPOUT:
-            dropout_operation(dep_value[0], s->value, s->size, model->slots[slot].dropout_rate);
+            for (int b = 0; b < s->size; ++b)
+            {
+                if ((double)rand() / RAND_MAX > s->dropout_rate)
+                {
+                    s->value[b] = dep_value[0][b];
+                    s->dropped = 0;
+                }
+                else
+                {
+                    s->value[b] = 0.0;
+                    s->dropped = 1;
+                }
+            }
             break;
 
         default:
@@ -876,6 +880,7 @@ int zerograd(Model *model)
         {
             model->slots[j].gradient[b] = 0.0;
             model->slots[j].visited = 0;
+            model->slots[j].dropped = 0;
         }
     }
     return 0;
