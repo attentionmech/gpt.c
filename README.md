@@ -35,6 +35,7 @@ Implementing decoder-only GPT style transformer in C
 - [X] positional Encoding  
 - [X] learnable embeddings (one-hot X matrix = embedding)
 - [X] adam optim
+- [ ] add layer norms, dropout, and residuals
 
 Current State:
 
