@@ -50,6 +50,7 @@ dataset is within the repo itself
 
 #### issues encountered:
 
+- dropout at 0 is not behaving correctly, which means there is something wrong in impl of it
 - ~~too much object reallocation, design needs to change~~
 - ~~Gradients are not converging properly~~
 - ~~MNIST Test failed because of memory leaks.~~
