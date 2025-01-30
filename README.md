@@ -4,6 +4,7 @@
 # Updates
 
 - Currently it's very slow, need update the codebase with CUDA; the last training run is present in assets/train.log
+- loss graph visualisation: [loss](https://x.com/attentionmech/status/1884564917304357127)
 
 
 Implementing decoder-only GPT style transformer in C
