@@ -10,7 +10,7 @@
 #define MAX_NODES 10000000
 #define MAX_ELEMENTS 1000000 // maximum elements in a single tensor
 #define MAX_FILE_SIZE 10000
-#define MAX_SAMPLES 100
+#define MAX_SAMPLES 1000
 
 // bpe related
 // byte pair encoder just takes your characters and
@@ -1321,18 +1321,19 @@ Model *build_model(int num_inputs, int num_outputs, int seq_len, int vocab_size,
     }
 
     // embedding layer (ff based)
-    curr_layer = create_feedforward_network(model, curr_layer, num_inputs, seq_len * embed_size, 0.0); // TODO: not doing dropouts here, but should i?
+    curr_layer = create_feedforward_network(model, curr_layer, num_inputs, embed_size, 0.0); // TODO: not doing dropouts here, but should i?
 
     // doing another mapping so that the symmetry is better to apply residuals
-    curr_layer = create_feedforward_network(model, curr_layer, seq_len * embed_size, seq_len * d_model, dropout_rate); // TODO: not doing dropouts here, but should i?
+    curr_layer = create_feedforward_network(model, curr_layer, embed_size, d_model, dropout_rate); // TODO: not doing dropouts here, but should i?
 
     for (int i = 0; i < num_blocks; i++)
     {
-        curr_layer = create_multihead_attention_layer(model, curr_layer, seq_len * d_model, d_ff, num_heads, dropout_rate);
-        curr_layer = create_feedforward_network(model, curr_layer, seq_len * d_ff * d_model, seq_len * d_model, dropout_rate);
+        curr_layer = create_multihead_attention_layer(model, curr_layer, d_model, d_model, num_heads, dropout_rate);
+        curr_layer = create_feedforward_network(model, curr_layer, d_model * d_ff, d_ff, dropout_rate);
+        curr_layer = create_feedforward_network(model, curr_layer, d_ff, d_model, dropout_rate);
     }
 
-    curr_layer = create_feedforward_network(model, curr_layer, seq_len * d_model, vocab_size, dropout_rate);
+    curr_layer = create_feedforward_network(model, curr_layer, d_model, vocab_size, dropout_rate);
 
     int *output_nodes = curr_layer;
     int *softmax_nodes = create_softmax_layer(model, output_nodes, num_outputs);
