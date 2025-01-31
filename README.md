@@ -45,6 +45,7 @@ dataset is within the repo itself
 - [X] learnable embeddings (one-hot X matrix = embedding)
 - [X] adam optim
 - [X] add dropout
+- [ ] add back seq_len param to attention and ffn
 - [ ] residual
 - [ ] layernorms
 - [ ] handle resume/restart of training
