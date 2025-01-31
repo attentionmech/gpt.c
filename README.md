@@ -1,6 +1,6 @@
 # gpt.c
 
-Implementing decoder-only GPT style transformer in C [very much ongoing project, don't use for anything except learning]
+Implementing decoder-only GPT style transformer in C [dev pause, learning cuda]
 
 ![demo](assets/demo.gif)
 
