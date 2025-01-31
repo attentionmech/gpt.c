@@ -54,7 +54,7 @@ dataset is within the repo itself
 
 #### issues encountered:
 
-- the build model function is messy, can simply with a matrix abstraction; otherwise rest of the features would be hard to implement correctly
+- the build model function is messy, can simply with a matrix abstraction; otherwise rest of the features would be hard to implement correctly; good point to learn cuda and implement matmuls 
 - ~~dropout at 0 is not behaving correctly, which means there is something wrong in impl of it~~
 - ~~too much object reallocation, design needs to change~~
 - ~~Gradients are not converging properly~~
