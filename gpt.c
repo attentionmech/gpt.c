@@ -1330,19 +1330,7 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     {
 
         curr_layer = create_multihead_attention_layer(model, curr_layer, mlp_size, attention_size, num_heads, dropout_rate);
-
-
-
-        // looks messy, can simplify
-        int *ff_input = curr_layer;
         curr_layer = create_feedforward_network(model, curr_layer, mlp_size * attention_size, mlp_size, dropout_rate);
-        int *residual_ff_output = malloc(mlp_size * sizeof(int));
-        for (int k = 0; k < mlp_size; k++)
-        {
-            residual_ff_output[k] = create_operation_node(model, ADD, wrap_in_array(ff_input[k], curr_layer[k]), 2, (int[]){BATCH_SIZE, 1}, 2);
-        }
-        free(curr_layer);
-        curr_layer = residual_ff_output;
     }
 
     curr_layer = create_feedforward_network(model, curr_layer, mlp_size, vocab_size, dropout_rate);
