@@ -1431,7 +1431,7 @@ void inference(Model *model, const char *input_string, int num_inputs, int *inde
     free(sequence);
 }
 
-void train(Model *model, double **inputs, int labels[], int num_samples, double learning_rate, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length)
+void train(Model *model, double **inputs, int labels[], int num_samples, double learning_rate, int *index_to_token, int *token_to_index, int vocab_size, int data_length, BPEMerge *merges, int num_merges, int seq_length, const char *inference_string)
 {
     int num_outputs = model->num_outputs;
     int num_inputs = model->num_inputs;
@@ -1526,7 +1526,7 @@ void train(Model *model, double **inputs, int labels[], int num_samples, double 
             printf("Epoch %d, Batch %d/ %d \n", epoch + 1, i / BATCH_SIZE, num_samples / BATCH_SIZE);
         }
 
-        inference(model, "Hello ", num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_node, num_outputs, softmax_nodes);
+        inference(model, inference_string, num_inputs, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, positional_encoding, loss_node, num_outputs, softmax_nodes);
 
         printf("Epoch %d, Avg. Loss: %f\n\n", epoch + 1, total_loss / num_samples);
 
@@ -1621,10 +1621,11 @@ int main()
     int d_ff = 4;
     int d_model = 8;
     double dropout_rate = 0.1;
+    const char *inference_string = "Hello ";
 
     Model *model = build_model(num_inputs, num_outputs, seq_len, vocab_size, embed_size, num_heads, num_blocks, d_ff, d_model, dropout_rate);
 
-    train(model, inputs, labels, num_samples, learning_rate, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, seq_len);
+    train(model, inputs, labels, num_samples, learning_rate, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, seq_len, inference_string);
 
     for (int i = 0; i < num_samples; i++)
     {
