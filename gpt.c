@@ -1328,6 +1328,11 @@ Model *build_model(int num_inputs, int num_outputs, int seq_len, int vocab_size,
 
     for (int i = 0; i < num_blocks; i++)
     {
+        // here seq_len parameter needs to be passed,
+        // need to figure out correct structure
+        // may be go away with layers and just work directly
+        // with matrices is the solution
+        // TODO: update after learning cuda
         curr_layer = create_multihead_attention_layer(model, curr_layer, d_model, d_model, num_heads, dropout_rate);
         curr_layer = create_feedforward_network(model, curr_layer, d_model * d_model, d_ff, dropout_rate);
         curr_layer = create_feedforward_network(model, curr_layer, d_ff, d_model, dropout_rate);
