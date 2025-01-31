@@ -1144,7 +1144,7 @@ int *create_multihead_attention_layer(Model *model, int *input_nodes, int num_in
 }
 
 // not used, keeping to to compare
-int *create_attention_layer(Model *model, int *input_nodes, int num_inputs, int d_model)
+int *create_attention_layer(Model *model, int *input_nodes, int num_inputs, int seq_len, int d_model)
 {
     int Q_weights[d_model * num_inputs];
     int K_weights[d_model * num_inputs];
@@ -1304,7 +1304,7 @@ int *create_feedforward_network(Model *model, int *prev_layer_nodes, int prev_la
     return curr_layer_nodes;
 }
 
-Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_size, int num_heads, int num_blocks, int mlp_size, int attention_size, double dropout_rate)
+Model *build_model(int num_inputs, int num_outputs, int seq_len, int vocab_size, int embed_size, int num_heads, int num_blocks, int d_ff, int d_model, double dropout_rate)
 {
     Model *model = (Model *)malloc(sizeof(Model));
 
@@ -1321,19 +1321,18 @@ Model *build_model(int num_inputs, int num_outputs, int vocab_size, int embed_si
     }
 
     // embedding layer (ff based)
-    curr_layer = create_feedforward_network(model, curr_layer, num_inputs, embed_size, 0.0); // TODO: not doing dropouts here, but should i?
+    curr_layer = create_feedforward_network(model, curr_layer, num_inputs, seq_len * embed_size, 0.0); // TODO: not doing dropouts here, but should i?
 
     // doing another mapping so that the symmetry is better to apply residuals
-    curr_layer = create_feedforward_network(model, curr_layer, embed_size, mlp_size, dropout_rate); // TODO: not doing dropouts here, but should i?
+    curr_layer = create_feedforward_network(model, curr_layer, seq_len * embed_size, seq_len * d_model, dropout_rate); // TODO: not doing dropouts here, but should i?
 
     for (int i = 0; i < num_blocks; i++)
     {
-
-        curr_layer = create_multihead_attention_layer(model, curr_layer, mlp_size, attention_size, num_heads, dropout_rate);
-        curr_layer = create_feedforward_network(model, curr_layer, mlp_size * attention_size, mlp_size, dropout_rate);
+        curr_layer = create_multihead_attention_layer(model, curr_layer, seq_len * d_model, d_ff, num_heads, dropout_rate);
+        curr_layer = create_feedforward_network(model, curr_layer, seq_len * d_ff * d_model, seq_len * d_model, dropout_rate);
     }
 
-    curr_layer = create_feedforward_network(model, curr_layer, mlp_size, vocab_size, dropout_rate);
+    curr_layer = create_feedforward_network(model, curr_layer, seq_len * d_model, vocab_size, dropout_rate);
 
     int *output_nodes = curr_layer;
     int *softmax_nodes = create_softmax_layer(model, output_nodes, num_outputs);
@@ -1589,7 +1588,7 @@ int main()
         }
     }
 
-    int seq_len = 64;
+    int seq_len = 4;
     int num_samples = num_numbers - seq_len;
 
     if (num_samples > MAX_SAMPLES)
@@ -1619,11 +1618,11 @@ int main()
     int num_heads = 2;
     int num_outputs = vocab_size;
     int num_blocks = 4;
-    int mlp_size = 4;
-    int attention_size = 16;
+    int d_ff = 4;
+    int d_model = 8;
     double dropout_rate = 0.1;
 
-    Model *model = build_model(num_inputs, num_outputs, vocab_size, embed_size, num_heads, num_blocks, mlp_size, attention_size, dropout_rate);
+    Model *model = build_model(num_inputs, num_outputs, seq_len, vocab_size, embed_size, num_heads, num_blocks, d_ff, d_model, dropout_rate);
 
     train(model, inputs, labels, num_samples, learning_rate, index_to_token, token_to_index, vocab_size, data_length, merges, num_merges, seq_len);
 
