@@ -49,6 +49,7 @@ dataset is within the repo itself
 - [X] add dropout
 - [ ] LEARN CUDA
 - [ ] add back seq_len param to attention and ffn
+- [ ] add masking in attention
 - [ ] residual
 - [ ] layernorms
 - [ ] handle resume/restart of training
