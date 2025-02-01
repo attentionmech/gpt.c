@@ -1,6 +1,8 @@
 # gpt.c
 
-Implementing decoder-only GPT style transformer in C *unfinished dev*
+Implementing decoder-only GPT style transformer in C 
+
+Note: *unfinished dev*
 
 ![demo](assets/demo.gif)
 
